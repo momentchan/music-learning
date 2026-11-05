@@ -59,6 +59,14 @@ test('phone fits a vertical 1–12 fretboard without sideways scrolling', async 
   await page.getByRole('group', { name: 'Fretboard mode' }).getByRole('button', { name: 'One note' }).click()
   await page.evaluate(() => window.scrollTo(0, 0))
   expect(await page.evaluate(() => document.querySelector('svg.fretboard')!.getBoundingClientRect().bottom < document.querySelector('.bottom-nav')!.getBoundingClientRect().top)).toBe(true)
+  await page.getByRole('group', { name: 'Fretboard mode' }).getByRole('button', { name: 'Random review' }).click()
+  expect(await page.evaluate(() => document.querySelector('svg.fretboard')!.getBoundingClientRect().bottom < document.querySelector('.bottom-nav')!.getBoundingClientRect().top)).toBe(true)
+  const mobileNote = await page.locator('.fretboard-quiz strong').evaluate(element => element.firstChild?.textContent || '')
+  const mobileString = Number((await page.locator('.fretboard-quiz strong em').textContent())!.replace('string ', ''))
+  const otherPosition = positionsForNote(mobileNote).find(position => position.string !== mobileString)!
+  await page.locator(`svg.fretboard g[aria-label="String ${otherPosition.string}, fret ${otherPosition.fret}"]`).tap()
+  await expect(page.getByRole('status')).toContainText(`Try string ${mobileString}`)
+  expect(await page.evaluate(() => document.querySelector('svg.fretboard')!.getBoundingClientRect().bottom < document.querySelector('.bottom-nav')!.getBoundingClientRect().top)).toBe(true)
   await context.close()
 })
 
@@ -81,11 +89,26 @@ test('one-note practice checks positions and keeps a local record', async ({ pag
   await expect(page.getByText('Local record for C: 6 correct, 1 missed.')).toBeVisible()
 })
 
-test('random review accepts any matching fretboard position', async ({ page }) => {
+test('random review requires the prompted string and records position-specific recall', async ({ page }) => {
   await page.goto('/')
   await page.getByRole('group', { name: 'Fretboard mode' }).getByRole('button', { name: 'Random review' }).click()
-  const target = await page.locator('.fretboard-quiz strong').textContent()
-  const position = positionsForNote(target!)[0]
+  const target = await page.locator('.fretboard-quiz strong').evaluate(element => element.firstChild?.textContent || '')
+  const targetString = Number((await page.locator('.fretboard-quiz strong em').textContent())!.replace('string ', ''))
+  const positions = positionsForNote(target)
+  const otherString = positions.find(position => position.string !== targetString)!
+  const position = positions.find(position => position.string === targetString)!
+  await page.locator(`svg.fretboard g[aria-label="String ${otherString.string}, fret ${otherString.fret}"]`).click()
+  await expect(page.getByRole('status')).toContainText(`Try string ${targetString}`)
+  await expect(page.getByRole('button', { name: 'Next →' })).toHaveCount(0)
   await page.locator(`svg.fretboard g[aria-label="String ${position.string}, fret ${position.fret}"]`).click()
-  await expect(page.getByRole('button', { name: 'Next note →' })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Next →' })).toBeVisible()
+  await expect(page.getByText(`Local record for ${target} on string ${targetString}: 1 correct, 1 missed.`)).toBeVisible()
+  const records = await page.evaluate(async targetString => {
+    const database = await new Promise<IDBDatabase>((resolve, reject) => { const request = indexedDB.open('guitar-lab'); request.onsuccess = () => resolve(request.result); request.onerror = () => reject(request.error) })
+    const attempts = await new Promise<{ targetString: number; targetFret: number; assisted: boolean }[]>((resolve, reject) => { const request = database.transaction('attempts').objectStore('attempts').getAll(); request.onsuccess = () => resolve(request.result); request.onerror = () => reject(request.error) })
+    database.close()
+    return attempts.filter(attempt => attempt.targetString === targetString)
+  }, targetString)
+  expect(records).toHaveLength(2)
+  expect(records.map(record => [record.targetString, record.targetFret, record.assisted])).toEqual(expect.arrayContaining([[targetString, position.fret, false], [targetString, position.fret, true]]))
 })

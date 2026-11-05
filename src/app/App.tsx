@@ -3,7 +3,7 @@ import { audioEngine } from '../audio/AudioEngine'
 import { db, saveAttempt, type AudioAttempt } from '../data/db'
 import { COMPARISONS, comparisonEvents } from '../music/comparisons'
 import { makeEarQuestion, type EarQuestion, type EarType } from '../music/ear'
-import { chooseReviewNote, positionsForNote } from '../music/fretboardQuiz'
+import { chooseReviewPosition, fretRegion, positionsForNote, reviewSummary, type ReviewPosition } from '../music/fretboardQuiz'
 import { CHORD_INTERVALS, INTERVALS, SHARPS, STANDARD_TUNING, chordPitchClasses, chordVoicing, midiToFrequency, noteName, parseChord, planProgression, scaleNotes, type ChordStyle, type IntervalMode, type ProgressionChord, type ScaleName } from '../music/theory'
 import { useAudioSettings } from '../state/useAudioSettings'
 
@@ -83,23 +83,25 @@ function Fretboard({ run }: { run: (fn: () => Promise<unknown>) => Promise<void>
   const [vertical, setVertical] = useState(() => typeof window !== 'undefined' && window.matchMedia('(max-width: 700px)').matches)
   const [mode, setMode] = useState<'explore' | 'one-note' | 'random'>('explore')
   const [singleNote, setSingleNote] = useState<string>('C')
-  const [randomNote, setRandomNote] = useState<string>('C')
+  const [randomTarget, setRandomTarget] = useState<ReviewPosition>({ note: 'C', string: 6, fret: 8, midi: 48, reason: 'new' })
   const [seed, setSeed] = useState(0)
   const [found, setFound] = useState<string[]>([])
   const [roundDone, setRoundDone] = useState(false)
   const [lastResult, setLastResult] = useState<{ correct: boolean; label: string; repeated?: boolean } | null>(null)
   const [quizAttempts, setQuizAttempts] = useState<AudioAttempt[]>([])
   const [quizError, setQuizError] = useState('')
-  const [roundStartedAt, setRoundStartedAt] = useState(Date.now())
+  const attemptStartedAt = useRef(Date.now())
   const [sessionId] = useState(() => crypto.randomUUID())
   const answerPending = useRef(false)
+  const roundMissed = useRef(false)
   const [accessibleString, setAccessibleString] = useState(1)
   const [accessibleFret, setAccessibleFret] = useState(1)
   const frets = Array.from({ length: 12 }, (_, index) => index + 1)
   const strings = [5, 4, 3, 2, 1, 0]
-  const targetNote = mode === 'one-note' ? singleNote : randomNote
+  const targetNote = mode === 'one-note' ? singleNote : randomTarget.note
   const targetCount = positionsForNote(targetNote).length
-  const currentAttempts = quizAttempts.filter(attempt => attempt.topicId === `fretboard.note.${targetNote}`)
+  const currentAttempts = quizAttempts.filter(attempt => attempt.topicId === `fretboard.note.${targetNote}` && (mode === 'one-note' || (attempt.targetString ?? attempt.string) === randomTarget.string))
+  const progress = reviewSummary(quizAttempts, Date.now())
   useEffect(() => {
     const query = window.matchMedia('(max-width: 700px)')
     const updateLayout = () => setVertical(query.matches)
@@ -110,17 +112,17 @@ function Fretboard({ run }: { run: (fn: () => Promise<unknown>) => Promise<void>
     void db.attempts.where('exerciseType').equals('fretboard.find-note').toArray()
       .then(rows => setQuizAttempts(rows.sort((a, b) => a.timestamp - b.timestamp))).catch(() => setQuizError('Practice records are unavailable on this device.'))
   }, [])
-  function resetRound() { setFound([]); setRoundDone(false); setLastResult(null); setSelected(null); setShowAll(false); setRoundStartedAt(Date.now()) }
+  function resetRound() { setFound([]); setRoundDone(false); setLastResult(null); setSelected(null); setShowAll(false); attemptStartedAt.current = Date.now(); roundMissed.current = false }
   function changeMode(next: 'explore' | 'one-note' | 'random') {
     setMode(next); setShowAll(false); resetRound()
     if (next === 'random') {
       const nextSeed = crypto.getRandomValues(new Uint32Array(1))[0]
-      setSeed(nextSeed); setRandomNote(chooseReviewNote(quizAttempts, nextSeed))
+      setSeed(nextSeed); setRandomTarget(chooseReviewPosition(quizAttempts, nextSeed, Date.now()))
     }
   }
   function nextRandomNote() {
     const nextSeed = crypto.getRandomValues(new Uint32Array(1))[0]
-    setSeed(nextSeed); setRandomNote(chooseReviewNote(quizAttempts, nextSeed, randomNote)); resetRound()
+    setSeed(nextSeed); setRandomTarget(chooseReviewPosition(quizAttempts, nextSeed, Date.now(), randomTarget)); resetRound()
   }
   function nextSingleNote() { setSingleNote(SHARPS[(SHARPS.indexOf(singleNote as typeof SHARPS[number]) + 1) % SHARPS.length]); resetRound() }
   async function choose(string: number, fret: number) {
@@ -131,17 +133,27 @@ function Fretboard({ run }: { run: (fn: () => Promise<unknown>) => Promise<void>
     if (mode === 'one-note' && found.includes(positionKey)) { setLastResult({ correct: true, label: 'You already found this position.', repeated: true }); return }
     answerPending.current = true
     const actualNote = SHARPS[midi % 12]
-    const correct = actualNote === targetNote
+    const targetString = mode === 'random' ? randomTarget.string : 6 - string
+    const targetFret = mode === 'random' ? randomTarget.fret : positionsForNote(targetNote).find(position => position.string === targetString)!.fret
+    const correct = actualNote === targetNote && (mode === 'one-note' || targetString === 6 - string)
+    if (!correct) roundMissed.current = true
+    const assisted = mode === 'random' && correct && roundMissed.current
     const nextFound = correct && mode === 'one-note' ? [...found, positionKey] : found
     setSelected({ string, fret, midi })
-    setLastResult({ correct, label: correct ? `${noteName(midi)} · string ${6 - string}, fret ${fret}` : `${noteName(midi)} is ${actualNote}. Find ${targetNote}.` })
+    const wrongLabel = mode === 'random'
+      ? `Try string ${targetString}, ${fretRegion(targetFret)}. ${actualNote === targetNote ? `Right note on string ${6 - string}.` : `${noteName(midi)} is ${actualNote}.`}`
+      : `${noteName(midi)} is ${actualNote}. Find ${targetNote}.`
+    setLastResult({ correct, label: correct ? `${noteName(midi)} · string ${6 - string}, fret ${fret}` : wrongLabel })
     if (correct) { setFound(nextFound); if (mode === 'random' || nextFound.length === targetCount) setRoundDone(true) }
     void run(() => audioEngine.playNote(midi))
     try {
+      const timestamp = Date.now()
+      const responseMs = Math.max(0, timestamp - attemptStartedAt.current)
+      attemptStartedAt.current = timestamp
       const record = await saveAttempt({ id: crypto.randomUUID(), sessionId, exerciseType: 'fretboard.find-note', topicId: `fretboard.note.${targetNote}`,
-        question: { mode, targetNote, seed, frets: [1, 12] }, response: `String ${6 - string}, fret ${fret}, ${noteName(midi)}`, expected: targetNote,
-        correct, responseMs: Math.max(0, Date.now() - roundStartedAt), replays: 0, difficulty: 1, timestamp: Date.now(),
-        string: 6 - string, fret, note: targetNote, mode })
+        question: { mode, targetNote, targetString, targetFret, seed, frets: [1, 12] }, response: `String ${6 - string}, fret ${fret}, ${noteName(midi)}`, expected: `String ${targetString}, fret ${targetFret}, ${targetNote}`,
+        correct, responseMs, replays: 0, difficulty: 1, timestamp,
+        string: 6 - string, fret, note: targetNote, mode, targetString, targetFret, assisted })
       setQuizAttempts(previous => [...previous, record])
     } catch { setQuizError('Answer checked, but it could not be saved. Check browser storage and try again.') }
     finally { answerPending.current = false }
@@ -159,8 +171,8 @@ function Fretboard({ run }: { run: (fn: () => Promise<unknown>) => Promise<void>
   return <><section className="intro-card"><div><p className="eyebrow">01 / INTERACTIVE INSTRUMENT</p><h2>Hear every position.</h2><p>Explore the neck or practice finding notes on frets 1–12.</p></div><div className="pulse-icon">♪</div></section>
     <section className={`card fretboard-card${mode === 'explore' ? '' : ' practice'}`}><div className="section-head"><div><h3>SVG fretboard</h3><p>Standard tuning · E A D G B E · frets 1–12</p></div><button className="subtle-button" disabled={mode !== 'explore' && !roundDone} onClick={() => setShowAll(!showAll)}>{showAll ? 'Hide labels' : 'Show labels'}</button></div>
       <div className="fretboard-modes" role="group" aria-label="Fretboard mode"><button className={mode === 'explore' ? 'active' : ''} onClick={() => changeMode('explore')}>Explore</button><button className={mode === 'one-note' ? 'active' : ''} onClick={() => changeMode('one-note')}>One note</button><button className={mode === 'random' ? 'active' : ''} onClick={() => changeMode('random')}>Random review</button></div>
-      {mode !== 'explore' && <div className="fretboard-quiz"><div><span className="eyebrow">FIND THE NOTE</span><strong>{targetNote}{mode === 'one-note' && <em>{found.length} / {targetCount} found</em>}</strong><small role="status" title={lastResult?.label}>{lastResult ? `${lastResult.label}${roundDone && !lastResult.repeated ? mode === 'one-note' ? ' All positions found!' : ' Nice work!' : ''}` : mode === 'one-note' ? 'Find it on every string' : 'Tap any matching position'}</small></div>{mode === 'one-note' ? <><label>Practice note<select aria-label="Practice note" value={singleNote} onChange={e => { setSingleNote(e.target.value); resetRound() }}>{SHARPS.map(note => <option key={note}>{note}</option>)}</select></label>{roundDone && <button className="secondary-button" onClick={nextSingleNote}>Next note →</button>}</> : <button className="secondary-button" onClick={nextRandomNote}>{roundDone ? 'Next note →' : 'Skip note →'}</button>}</div>}
-      {mode !== 'explore' && <p className="quiz-guidance">{mode === 'one-note' ? 'Find this note on every string. Green positions are already found.' : 'Missed notes appear more often. Skipping never counts as a mistake.'} Local record for {targetNote}: {currentAttempts.filter(attempt => attempt.correct).length} correct, {currentAttempts.filter(attempt => !attempt.correct).length} missed.</p>}
+      {mode !== 'explore' && <div className="fretboard-quiz"><div><span className="eyebrow">FIND THE NOTE</span><strong>{targetNote}<em>{mode === 'one-note' ? `${found.length} / ${targetCount} found` : `string ${randomTarget.string}`}</em></strong><small role="status" title={lastResult?.label}>{lastResult ? `${lastResult.label}${roundDone && !lastResult.repeated ? mode === 'one-note' ? ' All positions found!' : ' Nice work!' : ''}` : mode === 'one-note' ? 'Find it on every string' : `${{ new: 'New position', missed: 'Missed position', due: 'Due for review', practice: 'Extra practice' }[randomTarget.reason]} · ${progress.seen}/72 seen`}</small></div>{mode === 'one-note' ? <><label>Practice note<select aria-label="Practice note" value={singleNote} onChange={e => { setSingleNote(e.target.value); resetRound() }}>{SHARPS.map(note => <option key={note}>{note}</option>)}</select></label>{roundDone && <button className="secondary-button" onClick={nextSingleNote}>Next note →</button>}</> : <button className="secondary-button" onClick={nextRandomNote}>{roundDone ? 'Next →' : 'Skip →'}</button>}</div>}
+      {mode !== 'explore' && <p className="quiz-guidance">{mode === 'one-note' ? 'Find this note on every string. Green positions are already found.' : `Review by note and string: ${progress.missed} missed, ${progress.due} due. Misses and overdue positions return more often; skipping has no penalty.`} Local record for {targetNote}{mode === 'random' ? ` on string ${randomTarget.string}` : ''}: {currentAttempts.filter(attempt => attempt.correct).length} correct, {currentAttempts.filter(attempt => !attempt.correct).length} missed.</p>}
       {quizError && <div className="notice" role="alert">{quizError}</div>}
       <div className="fretboard-scroll" role="region" aria-label={vertical ? 'Fretboard frets 1 to 12' : 'Scroll horizontally through frets 1 to 12'} tabIndex={0}>
         {vertical ? <svg className="fretboard vertical" width="300" height={MOBILE_FRETBOARD_HEIGHT} viewBox={`0 0 300 ${MOBILE_FRETBOARD_HEIGHT}`} preserveAspectRatio="none" role="group" aria-label="Vertical six-string guitar fretboard, frets 1 to 12">

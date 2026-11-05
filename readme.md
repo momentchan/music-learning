@@ -22,7 +22,7 @@ npm run build
 ## What works
 
 - SVG fretboard note selection for frets 1–12, with a horizontal desktop neck and a vertical mobile neck that fits on screen. Fret markers follow the 3, 5, 7, 9, and 12 pattern.
-- One-note practice finds every position of a selected note; random review favors notes missed before. Answers, string, fret, response time, and correctness are stored locally.
+- One-note practice finds every position of a selected note. Random review asks for a note on a specific string, so every string and fret position can be recalled. It prioritizes missed, due, and unseen positions using local 1/3/7/14/30-day review intervals. A corrected miss returns after one minute. Answers, target and selected positions, response time, and correctness are stored locally; speed and skips never lower mastery.
 - Chord, inversion, interval, arpeggio, and scale playback.
 - Tempo-based progression sequencer with loop and metronome controls, voice-leading voicings, and synchronized chord highlight.
 - A/B comparison library covering chord quality, resolution, and voice leading.
