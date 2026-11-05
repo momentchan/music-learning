@@ -1,10 +1,11 @@
 import { test, expect } from '@playwright/test'
+import { positionsForNote } from '../src/music/fretboardQuiz'
 
 test('fretboard note selection and silent mode', async ({ page }) => {
   await page.goto('/')
   await expect(page.getByRole('heading', { name: 'Fretboard', exact: true })).toBeVisible()
-  await page.locator('svg.fretboard g[aria-label="String 1, fret 0, E4"]').click()
-  await expect(page.getByText('String 1 · fret 0', { exact: false })).toBeVisible()
+  await page.locator('svg.fretboard g[aria-label="String 1, fret 1, F4"]').click()
+  await expect(page.getByText('String 1 · fret 1', { exact: false })).toBeVisible()
   await page.getByRole('button', { name: 'Turn silent mode on' }).click()
   await expect(page.getByRole('button', { name: 'Turn sound on' })).toBeVisible()
   await page.reload()
@@ -37,14 +38,54 @@ test('ear question validates and persists after reload', async ({ page }) => {
   await expect(page.locator('.history > div')).toHaveCount(1)
 })
 
-test('phone touch can distinguish neighboring fret positions without page overflow', async ({ browser }) => {
+test('phone fits a vertical 1–12 fretboard without sideways scrolling', async ({ browser }) => {
   const context = await browser.newContext({ viewport: { width: 320, height: 568 }, isMobile: true, hasTouch: true })
   const page = await context.newPage()
   await page.goto('/')
-  await page.locator('svg.fretboard g[aria-label="String 1, fret 0, E4"]').tap()
-  await expect(page.getByText('String 1 · fret 0', { exact: false })).toBeVisible()
+  await expect(page.locator('svg.fretboard > .svg-fret-label')).toHaveCount(12)
+  await expect(page.getByRole('group', { name: 'Vertical six-string guitar fretboard, frets 1 to 12' })).toBeVisible()
+  await expect(page.getByRole('group', { name: 'Fret range' })).toHaveCount(0)
+  expect(await page.evaluate(() => document.querySelector('svg.fretboard')!.getBoundingClientRect().bottom < document.querySelector('.bottom-nav')!.getBoundingClientRect().top)).toBe(true)
   await page.locator('svg.fretboard g[aria-label="String 1, fret 1, F4"]').tap()
   await expect(page.getByText('String 1 · fret 1', { exact: false })).toBeVisible()
+  await page.locator('svg.fretboard g[aria-label="String 1, fret 2, F#4"]').tap()
+  await expect(page.getByText('String 1 · fret 2', { exact: false })).toBeVisible()
+  await page.locator('svg.fretboard g[aria-label="String 1, fret 11, D#5"]').tap()
+  await expect(page.getByText('String 1 · fret 11', { exact: false })).toBeVisible()
+  await page.locator('svg.fretboard g[aria-label="String 1, fret 12, E5"]').tap()
+  await expect(page.getByText('String 1 · fret 12', { exact: false })).toBeVisible()
+  expect(await page.locator('.fretboard-scroll').evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true)
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
+  await page.getByRole('group', { name: 'Fretboard mode' }).getByRole('button', { name: 'One note' }).click()
+  await page.evaluate(() => window.scrollTo(0, 0))
+  expect(await page.evaluate(() => document.querySelector('svg.fretboard')!.getBoundingClientRect().bottom < document.querySelector('.bottom-nav')!.getBoundingClientRect().top)).toBe(true)
   await context.close()
+})
+
+test('one-note practice checks positions and keeps a local record', async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('group', { name: 'Fretboard mode' }).getByRole('button', { name: 'One note' }).click()
+  await expect(page.getByText('0 / 6 found')).toBeVisible()
+  await page.locator('svg.fretboard g[aria-label="String 1, fret 1"]').click()
+  await expect(page.getByRole('status')).toContainText('Find C')
+  await page.locator('svg.fretboard g[aria-label="String 2, fret 1"]').click()
+  await expect(page.getByText('1 / 6 found')).toBeVisible()
+  await expect(page.getByText('Local record for C: 1 correct, 1 missed.')).toBeVisible()
+  for (const [index, position] of positionsForNote('C').filter(position => !(position.string === 2 && position.fret === 1)).entries()) {
+    await page.locator(`svg.fretboard g[aria-label="String ${position.string}, fret ${position.fret}"]`).click()
+    await expect(page.getByText(`${index + 2} / 6 found`)).toBeVisible()
+  }
+  await expect(page.getByRole('button', { name: 'Next note →' })).toBeVisible()
+  await page.reload()
+  await page.getByRole('group', { name: 'Fretboard mode' }).getByRole('button', { name: 'One note' }).click()
+  await expect(page.getByText('Local record for C: 6 correct, 1 missed.')).toBeVisible()
+})
+
+test('random review accepts any matching fretboard position', async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('group', { name: 'Fretboard mode' }).getByRole('button', { name: 'Random review' }).click()
+  const target = await page.locator('.fretboard-quiz strong').textContent()
+  const position = positionsForNote(target!)[0]
+  await page.locator(`svg.fretboard g[aria-label="String ${position.string}, fret ${position.fret}"]`).click()
+  await expect(page.getByRole('button', { name: 'Next note →' })).toBeVisible()
 })

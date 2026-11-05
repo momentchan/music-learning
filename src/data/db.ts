@@ -5,7 +5,7 @@ export interface AudioAttempt {
   id: string; sessionId: string; exerciseType: string; topicId: string;
   question: unknown; response: string; expected: string; correct: boolean;
   responseMs: number; replays: number; difficulty: number; timestamp: number;
-  masteryAfter: number
+  masteryAfter: number; string?: number; fret?: number; note?: string; mode?: string
 }
 export interface SettingRecord { id: 'audio'; value: AudioOptions }
 class GuitarLabDB extends Dexie {
@@ -14,6 +14,7 @@ class GuitarLabDB extends Dexie {
   constructor() {
     super('guitar-lab')
     this.version(1).stores({ attempts: 'id, sessionId, exerciseType, topicId, timestamp', settings: 'id' })
+    this.version(2).stores({ attempts: 'id, sessionId, exerciseType, topicId, timestamp, string, fret, note', settings: 'id' })
   }
 }
 export const db = new GuitarLabDB()

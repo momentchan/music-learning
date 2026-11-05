@@ -627,18 +627,21 @@ Create one reusable React/TypeScript SVG fretboard used by exercises and explore
 
 ### Display
 
-- Six strings, configurable tuning, and configurable fret count (12 by default)
+- Six strings, configurable tuning, and frets 1–12 in the default practice view
 - Accurate string order, nut, fret positions, markers, string/fret labels, and left-handed display option
 - Readable note labels and selected-position indicators at 320–430 CSS-pixel widths
 - Root, interval, scale-degree, and chord-tone indicators with text or shapes in addition to color
-- Optional compact, focused-string, or limited-fret view for narrow screens
+- Horizontal desktop and vertical mobile layout showing frets 1–12 together, without horizontal paging on phones
+- Wood and fret wires bounded by the first and sixth strings, with single inlays at frets 3, 5, 7, 9 and double inlays at fret 12
 - SVG chord diagrams and scale overlays generated from the same music theory data
 
-Use a stable coordinate model that maps each string/fret position to both a visible marker and a generous hit region. Keep hit regions at least about 44 × 44 CSS pixels where practical; when dense full-range layouts cannot fit them, provide zoom, fret-range paging, or focused-string mode. Verify touch selection for open strings and adjacent frets on small phones. Avoid tiny overlapping targets and accidental page scrolling during active interactions.
+Use a stable coordinate model that maps each string/fret position to a generous hit region. Keep hit regions at least about 44 × 44 CSS pixels where practical and verify adjacent-fret selection on small phones. Fit the full 1–12 layout above the mobile navigation where feasible. Avoid tiny overlapping targets and accidental sideways page scrolling.
 
 ### Interaction
 
 Users must be able to tap or keyboard-select a position, select multiple positions, reveal/hide note labels, highlight pitch classes, intervals, scales and chord tones, change supported tunings, and play selected notes when audio is enabled. Provide visible focus, clear selection state, and a semantic position list or grid for screen readers. Use SVG pointer events with explicit hit targets and a single logical position model; do not rely on hover or pixel-color hit testing.
+
+Provide one-note practice that asks learners to find every position of a chosen pitch class and random review that favors recently missed notes. Record each answer with target note, selected string and fret, correctness, elapsed time, and timestamp. Do not grade based on speed; allow learners to skip a random prompt without a penalty.
 
 Keep rendering lightweight: no permanent animation loop, GPU resource management, or camera controls. Handle resize and orientation changes, and preserve legibility at device zoom and high text scaling. Test the component with touch, mouse, and keyboard input.
 

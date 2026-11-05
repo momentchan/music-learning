@@ -1,8 +1,9 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { audioEngine } from '../audio/AudioEngine'
 import { db, saveAttempt, type AudioAttempt } from '../data/db'
 import { COMPARISONS, comparisonEvents } from '../music/comparisons'
 import { makeEarQuestion, type EarQuestion, type EarType } from '../music/ear'
+import { chooseReviewNote, positionsForNote } from '../music/fretboardQuiz'
 import { CHORD_INTERVALS, INTERVALS, SHARPS, STANDARD_TUNING, chordPitchClasses, chordVoicing, midiToFrequency, noteName, parseChord, planProgression, scaleNotes, type ChordStyle, type IntervalMode, type ProgressionChord, type ScaleName } from '../music/theory'
 import { useAudioSettings } from '../state/useAudioSettings'
 
@@ -27,6 +28,19 @@ const EAR_TYPES: { id: EarType; label: string }[] = [
   { id: 'progression', label: 'Progressions' },
 ]
 
+const FRET_WIRES = [40]
+for (let fret = 1; fret <= 12; fret++) {
+  FRET_WIRES.push(FRET_WIRES[fret - 1] + 82 * Math.pow(2, -(fret - 1) / 12))
+}
+const FRET_CENTERS = Array.from({ length: 13 }, (_, fret) => fret === 0 ? 0 : (FRET_WIRES[fret - 1] + FRET_WIRES[fret]) / 2)
+const FRETBOARD_WIDTH = Math.ceil(FRET_WIRES[12]) + 32
+const MOBILE_FRET_WIRES = [32]
+for (let fret = 1; fret <= 12; fret++) {
+  MOBILE_FRET_WIRES.push(MOBILE_FRET_WIRES[fret - 1] + Math.max(40, 54 * Math.pow(2, -(fret - 1) / 12)))
+}
+const MOBILE_FRET_CENTERS = Array.from({ length: 13 }, (_, fret) => fret === 0 ? 0 : (MOBILE_FRET_WIRES[fret - 1] + MOBILE_FRET_WIRES[fret]) / 2)
+const MOBILE_FRETBOARD_HEIGHT = Math.ceil(MOBILE_FRET_WIRES[12]) + 32
+
 export default function App() {
   const [page, setPage] = useState<Page>('fretboard')
   const { options, load, update, error: settingsError } = useAudioSettings()
@@ -48,7 +62,7 @@ export default function App() {
   }
   function stop() { audioEngine.stop(); setPlaying(false) }
   const title = NAV.find(item => item.id === page)!.label
-  return <div className="app-shell">
+  return <div className={`app-shell${page === 'fretboard' ? ' fretboard-page' : ''}`}>
     <header className="topbar"><div className="brand"><span className="brand-mark">GL</span><div><strong>Guitar Lab</strong><small>HEAR THE THEORY</small></div></div><button className={`sound-pill ${options.silent ? 'muted' : ''}`} onClick={() => void update({ silent: !options.silent })} aria-label={options.silent ? 'Turn sound on' : 'Turn silent mode on'}>{options.silent ? '◌ Silent' : '◖ Sound on'}</button></header>
     <main className="content"><div className="page-heading"><div><p className="eyebrow">PRACTICE STUDIO / {title.toUpperCase()}</p><h1>{title}</h1></div><span className="offline-badge">● Local-first</span></div>
       {(audioError || settingsError) && <div className="notice" role="alert">{audioError || settingsError}</div>}
@@ -64,29 +78,115 @@ export default function App() {
 }
 
 function Fretboard({ run }: { run: (fn: () => Promise<unknown>) => Promise<void> }) {
-  const [page, setPage] = useState(0)
   const [selected, setSelected] = useState<{ string: number; fret: number; midi: number } | null>(null)
   const [showAll, setShowAll] = useState(false)
+  const [vertical, setVertical] = useState(() => typeof window !== 'undefined' && window.matchMedia('(max-width: 700px)').matches)
+  const [mode, setMode] = useState<'explore' | 'one-note' | 'random'>('explore')
+  const [singleNote, setSingleNote] = useState<string>('C')
+  const [randomNote, setRandomNote] = useState<string>('C')
+  const [seed, setSeed] = useState(0)
+  const [found, setFound] = useState<string[]>([])
+  const [roundDone, setRoundDone] = useState(false)
+  const [lastResult, setLastResult] = useState<{ correct: boolean; label: string; repeated?: boolean } | null>(null)
+  const [quizAttempts, setQuizAttempts] = useState<AudioAttempt[]>([])
+  const [quizError, setQuizError] = useState('')
+  const [roundStartedAt, setRoundStartedAt] = useState(Date.now())
+  const [sessionId] = useState(() => crypto.randomUUID())
+  const answerPending = useRef(false)
   const [accessibleString, setAccessibleString] = useState(1)
-  const [accessibleFret, setAccessibleFret] = useState(0)
-  const frets = page === 2 ? [10, 11, 12] : Array.from({ length: 5 }, (_, i) => page * 5 + i)
+  const [accessibleFret, setAccessibleFret] = useState(1)
+  const frets = Array.from({ length: 12 }, (_, index) => index + 1)
   const strings = [5, 4, 3, 2, 1, 0]
+  const targetNote = mode === 'one-note' ? singleNote : randomNote
+  const targetCount = positionsForNote(targetNote).length
+  const currentAttempts = quizAttempts.filter(attempt => attempt.topicId === `fretboard.note.${targetNote}`)
+  useEffect(() => {
+    const query = window.matchMedia('(max-width: 700px)')
+    const updateLayout = () => setVertical(query.matches)
+    query.addEventListener('change', updateLayout)
+    return () => query.removeEventListener('change', updateLayout)
+  }, [])
+  useEffect(() => {
+    void db.attempts.where('exerciseType').equals('fretboard.find-note').toArray()
+      .then(rows => setQuizAttempts(rows.sort((a, b) => a.timestamp - b.timestamp))).catch(() => setQuizError('Practice records are unavailable on this device.'))
+  }, [])
+  function resetRound() { setFound([]); setRoundDone(false); setLastResult(null); setSelected(null); setShowAll(false); setRoundStartedAt(Date.now()) }
+  function changeMode(next: 'explore' | 'one-note' | 'random') {
+    setMode(next); setShowAll(false); resetRound()
+    if (next === 'random') {
+      const nextSeed = crypto.getRandomValues(new Uint32Array(1))[0]
+      setSeed(nextSeed); setRandomNote(chooseReviewNote(quizAttempts, nextSeed))
+    }
+  }
+  function nextRandomNote() {
+    const nextSeed = crypto.getRandomValues(new Uint32Array(1))[0]
+    setSeed(nextSeed); setRandomNote(chooseReviewNote(quizAttempts, nextSeed, randomNote)); resetRound()
+  }
+  function nextSingleNote() { setSingleNote(SHARPS[(SHARPS.indexOf(singleNote as typeof SHARPS[number]) + 1) % SHARPS.length]); resetRound() }
   async function choose(string: number, fret: number) {
     const midi = STANDARD_TUNING[string] + fret
+    if (mode === 'explore') { setSelected({ string, fret, midi }); await run(() => audioEngine.playNote(midi)); return }
+    if (roundDone || answerPending.current) return
+    const positionKey = `${string}-${fret}`
+    if (mode === 'one-note' && found.includes(positionKey)) { setLastResult({ correct: true, label: 'You already found this position.', repeated: true }); return }
+    answerPending.current = true
+    const actualNote = SHARPS[midi % 12]
+    const correct = actualNote === targetNote
+    const nextFound = correct && mode === 'one-note' ? [...found, positionKey] : found
     setSelected({ string, fret, midi })
-    await run(() => audioEngine.playNote(midi))
+    setLastResult({ correct, label: correct ? `${noteName(midi)} · string ${6 - string}, fret ${fret}` : `${noteName(midi)} is ${actualNote}. Find ${targetNote}.` })
+    if (correct) { setFound(nextFound); if (mode === 'random' || nextFound.length === targetCount) setRoundDone(true) }
+    void run(() => audioEngine.playNote(midi))
+    try {
+      const record = await saveAttempt({ id: crypto.randomUUID(), sessionId, exerciseType: 'fretboard.find-note', topicId: `fretboard.note.${targetNote}`,
+        question: { mode, targetNote, seed, frets: [1, 12] }, response: `String ${6 - string}, fret ${fret}, ${noteName(midi)}`, expected: targetNote,
+        correct, responseMs: Math.max(0, Date.now() - roundStartedAt), replays: 0, difficulty: 1, timestamp: Date.now(),
+        string: 6 - string, fret, note: targetNote, mode })
+      setQuizAttempts(previous => [...previous, record])
+    } catch { setQuizError('Answer checked, but it could not be saved. Check browser storage and try again.') }
+    finally { answerPending.current = false }
   }
-  return <><section className="intro-card"><div><p className="eyebrow">01 / INTERACTIVE INSTRUMENT</p><h2>Hear every position.</h2><p>Tap a string and fret. The pitch comes from standard tuning, including the correct octave.</p></div><div className="pulse-icon">♪</div></section>
-    <section className="card"><div className="section-head"><div><h3>SVG fretboard</h3><p>Standard tuning · E A D G B E</p></div><button className="subtle-button" onClick={() => setShowAll(!showAll)}>{showAll ? 'Hide labels' : 'Show labels'}</button></div>
-      <div className="fret-pages" role="group" aria-label="Fret range">{['Open–4', '5–9', '10–12'].map((label, i) => <button key={label} className={page === i ? 'active' : ''} onClick={() => setPage(i)}>{label}</button>)}</div>
-      <svg className="fretboard" viewBox="0 0 320 310" role="group" aria-label="Six-string guitar fretboard">
-        <rect x="37" y="28" width="274" height="252" rx="12" fill="#1d2632"/>
-        {frets.map((fret, col) => <g key={fret}><line x1={50 + col * 58} y1="30" x2={50 + col * 58} y2="278" stroke={fret === 0 ? '#e9ae6a' : '#475364'} strokeWidth={fret === 0 ? 5 : 2}/><text x={50 + col * 58} y="302" textAnchor="middle" className="svg-fret-label">{fret}</text></g>)}
-        {strings.map((string, row) => <g key={string}><line x1="40" y1={53 + row * 43} x2="307" y2={53 + row * 43} stroke="#8d9dad" strokeWidth={1.2 + (5 - row) * 0.35}/><text x="14" y={58 + row * 43} className="svg-string-label">{['E', 'A', 'D', 'G', 'B', 'e'][string]}</text>
-          {frets.map((fret, col) => { const x = 50 + col * 58; const y = 53 + row * 43; const midi = STANDARD_TUNING[string] + fret; const active = selected?.string === string && selected.fret === fret
-            return <g key={`${string}-${fret}`} onClick={() => void choose(string, fret)} onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); void choose(string, fret) } }} role="button" tabIndex={0} aria-label={`String ${6 - string}, fret ${fret}, ${noteName(midi)}`}><rect x={x - 27} y={y - 21} width="54" height="42" fill="transparent"/><circle cx={x} cy={y} r={active ? 17 : 13} fill={active ? '#ee765e' : '#324356'} stroke={active ? '#ffd5a5' : '#627284'} strokeWidth="1.5"/><text x={x} y={y + 4} textAnchor="middle" className="svg-note">{showAll || active ? noteName(midi).replace(/\d/, '') : '•'}</text></g> })}</g>)}
-      </svg>
-      <details className="position-controls"><summary>Choose a position with form controls</summary><div className="field-row"><label>String<select value={accessibleString} onChange={e => setAccessibleString(Number(e.target.value))}>{[1, 2, 3, 4, 5, 6].map(n => <option key={n} value={n}>String {n}</option>)}</select></label><label>Fret<select value={accessibleFret} onChange={e => setAccessibleFret(Number(e.target.value))}>{Array.from({ length: 13 }, (_, n) => <option key={n} value={n}>Fret {n}</option>)}</select></label></div><button className="secondary-button" onClick={() => void choose(6 - accessibleString, accessibleFret)}>Select and play {noteName(STANDARD_TUNING[6 - accessibleString] + accessibleFret)}</button></details>
+  function noteTarget(string: number, fret: number, x: number, y: number, hit: { x: number; y: number; width: number; height: number }) {
+    const midi = STANDARD_TUNING[string] + fret
+    const active = selected?.string === string && selected.fret === fret
+    const foundPosition = mode === 'one-note' && found.includes(`${string}-${fret}`)
+    const wrongPosition = mode !== 'explore' && active && lastResult?.correct === false
+    const marked = active || foundPosition
+    return <g key={`${string}-${fret}`} className={`fret-position${marked ? ' selected' : ''}`} onClick={() => void choose(string, fret)} onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); void choose(string, fret) } }} role="button" tabIndex={0} aria-label={`String ${6 - string}, fret ${fret}${mode === 'explore' || roundDone ? `, ${noteName(midi)}` : ''}`}>
+      <rect {...hit} fill="transparent"/><circle className="note-target" cx={x} cy={y} r={marked ? 16 : 12} fill={foundPosition ? '#3b9a70' : wrongPosition ? '#bb594e' : active ? '#ee765e' : showAll ? '#29313b' : 'transparent'} stroke={foundPosition ? '#b6efcf' : wrongPosition ? '#ffd4c9' : active ? '#ffd5a5' : showAll ? '#b6a994' : 'transparent'} strokeWidth="1.5"/>{(showAll || marked) && <text x={x} y={y + 4} textAnchor="middle" className="svg-note">{noteName(midi).replace(/\d/, '')}</text>}
+    </g>
+  }
+  return <><section className="intro-card"><div><p className="eyebrow">01 / INTERACTIVE INSTRUMENT</p><h2>Hear every position.</h2><p>Explore the neck or practice finding notes on frets 1–12.</p></div><div className="pulse-icon">♪</div></section>
+    <section className={`card fretboard-card${mode === 'explore' ? '' : ' practice'}`}><div className="section-head"><div><h3>SVG fretboard</h3><p>Standard tuning · E A D G B E · frets 1–12</p></div><button className="subtle-button" disabled={mode !== 'explore' && !roundDone} onClick={() => setShowAll(!showAll)}>{showAll ? 'Hide labels' : 'Show labels'}</button></div>
+      <div className="fretboard-modes" role="group" aria-label="Fretboard mode"><button className={mode === 'explore' ? 'active' : ''} onClick={() => changeMode('explore')}>Explore</button><button className={mode === 'one-note' ? 'active' : ''} onClick={() => changeMode('one-note')}>One note</button><button className={mode === 'random' ? 'active' : ''} onClick={() => changeMode('random')}>Random review</button></div>
+      {mode !== 'explore' && <div className="fretboard-quiz"><div><span className="eyebrow">FIND THE NOTE</span><strong>{targetNote}{mode === 'one-note' && <em>{found.length} / {targetCount} found</em>}</strong><small role="status" title={lastResult?.label}>{lastResult ? `${lastResult.label}${roundDone && !lastResult.repeated ? mode === 'one-note' ? ' All positions found!' : ' Nice work!' : ''}` : mode === 'one-note' ? 'Find it on every string' : 'Tap any matching position'}</small></div>{mode === 'one-note' ? <><label>Practice note<select aria-label="Practice note" value={singleNote} onChange={e => { setSingleNote(e.target.value); resetRound() }}>{SHARPS.map(note => <option key={note}>{note}</option>)}</select></label>{roundDone && <button className="secondary-button" onClick={nextSingleNote}>Next note →</button>}</> : <button className="secondary-button" onClick={nextRandomNote}>{roundDone ? 'Next note →' : 'Skip note →'}</button>}</div>}
+      {mode !== 'explore' && <p className="quiz-guidance">{mode === 'one-note' ? 'Find this note on every string. Green positions are already found.' : 'Missed notes appear more often. Skipping never counts as a mistake.'} Local record for {targetNote}: {currentAttempts.filter(attempt => attempt.correct).length} correct, {currentAttempts.filter(attempt => !attempt.correct).length} missed.</p>}
+      {quizError && <div className="notice" role="alert">{quizError}</div>}
+      <div className="fretboard-scroll" role="region" aria-label={vertical ? 'Fretboard frets 1 to 12' : 'Scroll horizontally through frets 1 to 12'} tabIndex={0}>
+        {vertical ? <svg className="fretboard vertical" width="300" height={MOBILE_FRETBOARD_HEIGHT} viewBox={`0 0 300 ${MOBILE_FRETBOARD_HEIGHT}`} preserveAspectRatio="none" role="group" aria-label="Vertical six-string guitar fretboard, frets 1 to 12">
+          <defs><linearGradient id="fretboard-wood" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stopColor="#5a4030"/><stop offset="0.5" stopColor="#3c2b25"/><stop offset="1" stopColor="#59402f"/></linearGradient></defs>
+          <rect x="45" y="30" width="220" height={MOBILE_FRET_WIRES[12] - 8} fill="url(#fretboard-wood)"/>
+          {[3, 5, 7, 9].map(fret => <circle key={fret} cx="155" cy={MOBILE_FRET_CENTERS[fret]} r="8" fill="#d8c7a9" opacity="0.7"/>)}
+          {[111, 199].map(x => <circle key={x} cx={x} cy={MOBILE_FRET_CENTERS[12]} r="8" fill="#d8c7a9" opacity="0.7"/>)}
+          <rect x="45" y={MOBILE_FRET_WIRES[0] - 4} width="220" height="8" rx="2" fill="#ead9be"/>
+          {MOBILE_FRET_WIRES.slice(1).map((y, fret) => <g key={fret}><line x1="45" y1={y + 1} x2="265" y2={y + 1} stroke="#1b1b1b" strokeWidth="4" opacity="0.4"/><line x1="45" y1={y} x2="265" y2={y} stroke="#c8c8c0" strokeWidth="3"/></g>)}
+          {strings.map((string, col) => <g key={string}><line x1={45 + col * 44} y1="32" x2={45 + col * 44} y2={MOBILE_FRET_WIRES[12] + 20} stroke="#c5bdb1" strokeWidth={1.2 + col * 0.45}/><text x={45 + col * 44} y="21" textAnchor="middle" className="svg-string-label">{['E', 'A', 'D', 'G', 'B', 'e'][string]}</text>
+            {frets.map(fret => noteTarget(string, fret, 45 + col * 44, MOBILE_FRET_CENTERS[fret], { x: 24 + col * 44, y: MOBILE_FRET_WIRES[fret - 1], width: 42, height: MOBILE_FRET_WIRES[fret] - MOBILE_FRET_WIRES[fret - 1] }))}</g>)}
+          {frets.map(fret => <text key={fret} x="14" y={MOBILE_FRET_CENTERS[fret] + 4} textAnchor="middle" className="svg-fret-label">{fret}</text>)}
+        </svg> : <svg className="fretboard" width={FRETBOARD_WIDTH} height="330" viewBox={`0 0 ${FRETBOARD_WIDTH} 330`} role="group" aria-label="Six-string guitar fretboard, frets 1 to 12">
+          <defs><linearGradient id="fretboard-wood" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#5a4030"/><stop offset="0.5" stopColor="#3c2b25"/><stop offset="1" stopColor="#59402f"/></linearGradient></defs>
+          <rect x="38" y="54" width={FRET_WIRES[12] - 18} height="215" fill="url(#fretboard-wood)"/>
+          {[3, 5, 7, 9].map(fret => <circle key={fret} cx={FRET_CENTERS[fret]} cy="161.5" r="8" fill="#d8c7a9" opacity="0.62"/>)}
+          {[118.5, 204.5].map(y => <circle key={y} cx={FRET_CENTERS[12]} cy={y} r="8" fill="#d8c7a9" opacity="0.62"/>)}
+          <rect x={FRET_WIRES[0] - 4} y="54" width="8" height="215" rx="2" fill="#ead9be"/>
+          {FRET_WIRES.slice(1).map((x, fret) => <g key={fret}><line x1={x + 1} y1="54" x2={x + 1} y2="269" stroke="#1b1b1b" strokeWidth="4" opacity="0.4"/><line x1={x} y1="54" x2={x} y2="269" stroke="#c8c8c0" strokeWidth="3"/></g>)}
+          {strings.map((string, row) => <g key={string}><line x1="40" y1={54 + row * 43} x2={FRET_WIRES[12] + 18} y2={54 + row * 43} stroke="#c5bdb1" strokeWidth={1.2 + row * 0.45}/><text x="14" y={59 + row * 43} className="svg-string-label">{['E', 'A', 'D', 'G', 'B', 'e'][string]}</text>
+            {frets.map(fret => noteTarget(string, fret, FRET_CENTERS[fret], 54 + row * 43, { x: FRET_WIRES[fret - 1], y: 33 + row * 43, width: FRET_WIRES[fret] - FRET_WIRES[fret - 1], height: 42 }))}</g>)}
+          {frets.map(fret => <text key={fret} x={FRET_CENTERS[fret]} y="316" textAnchor="middle" className="svg-fret-label">{fret}</text>)}
+        </svg>}
+      </div>
+      <p className="fretboard-hint">All frets from 1 to 12 are on this board.</p>
+      <details className="position-controls"><summary>Choose a position with form controls</summary><div className="field-row"><label>String<select value={accessibleString} onChange={e => setAccessibleString(Number(e.target.value))}>{[1, 2, 3, 4, 5, 6].map(n => <option key={n} value={n}>String {n}</option>)}</select></label><label>Fret<select value={accessibleFret} onChange={e => setAccessibleFret(Number(e.target.value))}>{frets.map(n => <option key={n} value={n}>Fret {n}</option>)}</select></label></div><button className="secondary-button" onClick={() => void choose(6 - accessibleString, accessibleFret)}>{mode === 'explore' ? `Select and play ${noteName(STANDARD_TUNING[6 - accessibleString] + accessibleFret)}` : 'Submit position'}</button></details>
       <div className="selected-note"><div><span className="eyebrow">SELECTED POSITION</span><strong>{selected ? noteName(selected.midi) : 'Tap a note'}</strong><small>{selected ? `String ${6 - selected.string} · fret ${selected.fret} · ${Math.round(midiToFrequency(selected.midi))} Hz` : 'The note and octave appear here'}</small></div>{selected && <button className="primary-button compact" onClick={() => void run(() => audioEngine.playNote(selected.midi))}>▶ Replay</button>}</div>
     </section></>
 }
@@ -157,7 +257,7 @@ function EarTraining({ run, stop }: { run: (fn: () => Promise<unknown>) => Promi
   const [saveError, setSaveError] = useState('')
   const [mastery, setMastery] = useState<number | null>(null)
   const [history, setHistory] = useState<AudioAttempt[]>([])
-  useEffect(() => { void db.attempts.orderBy('timestamp').reverse().limit(10).toArray().then(setHistory).catch(() => setSaveError('Practice history is unavailable on this device.')) }, [answer])
+  useEffect(() => { void db.attempts.orderBy('timestamp').reverse().filter(attempt => attempt.topicId.startsWith('ear.')).limit(10).toArray().then(setHistory).catch(() => setSaveError('Practice history is unavailable on this device.')) }, [answer])
   function next(nextType = type) { stop(); setType(nextType); setQuestion(makeEarQuestion(nextType)); setAnswer(null); setReplays(0); setStarted(0); setMastery(null); setSaveError('') }
   function play() {
     if (options.silent || !options.enabled) { void run(() => audioEngine.playSequence(question.events)); return }

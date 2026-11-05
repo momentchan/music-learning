@@ -21,7 +21,8 @@ npm run build
 
 ## What works
 
-- SVG fretboard note selection for open strings through fret 12, with correct pitch and octave and keyboard/form controls.
+- SVG fretboard note selection for frets 1–12, with a horizontal desktop neck and a vertical mobile neck that fits on screen. Fret markers follow the 3, 5, 7, 9, and 12 pattern.
+- One-note practice finds every position of a selected note; random review favors notes missed before. Answers, string, fret, response time, and correctness are stored locally.
 - Chord, inversion, interval, arpeggio, and scale playback.
 - Tempo-based progression sequencer with loop and metronome controls, voice-leading voicings, and synchronized chord highlight.
 - A/B comparison library covering chord quality, resolution, and voice leading.
@@ -35,4 +36,4 @@ The broader twelve-domain curriculum in [GUITAR_LAB_SPEC.md](GUITAR_LAB_SPEC.md)
 
 ## Deployment
 
-Cloudflare Pages can build the GitHub repository with `npm run build`, output directory `dist`, production branch `main`. A Git-connected Pages project deploys future pushes automatically. Verify the live URL and audio controls after each deployment.
+Cloudflare Pages builds the GitHub repository with `npm run build`, output directory `dist`, production branch `main`. The Git-connected site is [music-learning-52z.pages.dev](https://music-learning-52z.pages.dev/); future pushes deploy automatically.
