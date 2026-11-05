@@ -1,0 +1,197 @@
+import { useEffect, useState } from 'react'
+import { audioEngine } from '../audio/AudioEngine'
+import { db, saveAttempt, type AudioAttempt } from '../data/db'
+import { COMPARISONS, comparisonEvents } from '../music/comparisons'
+import { makeEarQuestion, type EarQuestion, type EarType } from '../music/ear'
+import { CHORD_INTERVALS, INTERVALS, SHARPS, STANDARD_TUNING, chordPitchClasses, chordVoicing, midiToFrequency, noteName, parseChord, planProgression, scaleNotes, type ChordStyle, type IntervalMode, type ProgressionChord, type ScaleName } from '../music/theory'
+import { useAudioSettings } from '../state/useAudioSettings'
+
+type Page = 'fretboard' | 'explore' | 'progressions' | 'compare' | 'ear' | 'settings'
+const NAV: { id: Page; icon: string; label: string }[] = [
+  { id: 'fretboard', icon: '◎', label: 'Fretboard' }, { id: 'explore', icon: '♫', label: 'Explore' },
+  { id: 'progressions', icon: '▥', label: 'Progressions' }, { id: 'compare', icon: '⇄', label: 'Compare' },
+  { id: 'ear', icon: '◉', label: 'Ear training' }, { id: 'settings', icon: '⚙', label: 'Settings' },
+]
+const EXAMPLES: { title: string; chords: string[] }[] = [
+  { title: 'ii–V–I', chords: ['Dm7', 'G7', 'Cmaj7'] },
+  { title: 'Dominants in C', chords: ['D7', 'G7', 'C'] },
+  { title: 'Borrowed iv', chords: ['F', 'Fm', 'C'] },
+  { title: 'V of vi', chords: ['E7', 'Am'] },
+  { title: 'Pop motion', chords: ['G', 'D', 'Cmaj7'] },
+  { title: 'Open resolution', chords: ['Cmaj7', 'Em7', 'D'] },
+]
+const EAR_TYPES: { id: EarType; label: string }[] = [
+  { id: 'interval', label: 'Intervals' }, { id: 'triad', label: 'Major / minor' },
+  { id: 'seventh', label: 'Seventh chords' }, { id: 'degree', label: 'Scale degree' },
+  { id: 'cadence', label: 'Cadences' }, { id: 'bass', label: 'Bass motion' },
+  { id: 'progression', label: 'Progressions' },
+]
+
+export default function App() {
+  const [page, setPage] = useState<Page>('fretboard')
+  const { options, load, update, error: settingsError } = useAudioSettings()
+  const [audioError, setAudioError] = useState('')
+  const [playing, setPlaying] = useState(false)
+  useEffect(() => { void load() }, [load])
+  useEffect(() => {
+    const stop = () => { audioEngine.stop(); setPlaying(false) }
+    const visibility = () => { if (document.hidden) stop() }
+    document.addEventListener('visibilitychange', visibility)
+    window.addEventListener('pagehide', stop)
+    return () => { document.removeEventListener('visibilitychange', visibility); window.removeEventListener('pagehide', stop); stop() }
+  }, [])
+  function navigate(next: Page) { audioEngine.stop(); setPlaying(false); setAudioError(''); setPage(next) }
+  async function run(fn: () => Promise<unknown>) {
+    if (options.silent || !options.enabled) { setAudioError('Audio is off. Turn it on in Settings to listen.'); return }
+    try { setAudioError(''); await fn(); setPlaying(true) }
+    catch (e) { setAudioError(e instanceof Error ? `Audio could not start: ${e.message}` : 'Audio could not start. Tap again to retry.'); setPlaying(false) }
+  }
+  function stop() { audioEngine.stop(); setPlaying(false) }
+  const title = NAV.find(item => item.id === page)!.label
+  return <div className="app-shell">
+    <header className="topbar"><div className="brand"><span className="brand-mark">GL</span><div><strong>Guitar Lab</strong><small>HEAR THE THEORY</small></div></div><button className={`sound-pill ${options.silent ? 'muted' : ''}`} onClick={() => void update({ silent: !options.silent })} aria-label={options.silent ? 'Turn sound on' : 'Turn silent mode on'}>{options.silent ? '◌ Silent' : '◖ Sound on'}</button></header>
+    <main className="content"><div className="page-heading"><div><p className="eyebrow">PRACTICE STUDIO / {title.toUpperCase()}</p><h1>{title}</h1></div><span className="offline-badge">● Local-first</span></div>
+      {(audioError || settingsError) && <div className="notice" role="alert">{audioError || settingsError}</div>}
+      {page === 'fretboard' && <Fretboard run={run} />}
+      {page === 'explore' && <Explore run={run} stop={stop} />}
+      {page === 'progressions' && <Progressions run={run} stop={stop} playing={playing} setPlaying={setPlaying} />}
+      {page === 'compare' && <Compare run={run} stop={stop} />}
+      {page === 'ear' && <EarTraining run={run} stop={stop} />}
+      {page === 'settings' && <Settings />}
+    </main>
+    <nav className="bottom-nav" aria-label="Primary navigation">{NAV.map(item => <button key={item.id} className={page === item.id ? 'selected' : ''} onClick={() => navigate(item.id)} aria-current={page === item.id ? 'page' : undefined}><span aria-hidden="true">{item.icon}</span><small>{item.label}</small></button>)}</nav>
+  </div>
+}
+
+function Fretboard({ run }: { run: (fn: () => Promise<unknown>) => Promise<void> }) {
+  const [page, setPage] = useState(0)
+  const [selected, setSelected] = useState<{ string: number; fret: number; midi: number } | null>(null)
+  const [showAll, setShowAll] = useState(false)
+  const [accessibleString, setAccessibleString] = useState(1)
+  const [accessibleFret, setAccessibleFret] = useState(0)
+  const frets = page === 2 ? [10, 11, 12] : Array.from({ length: 5 }, (_, i) => page * 5 + i)
+  const strings = [5, 4, 3, 2, 1, 0]
+  async function choose(string: number, fret: number) {
+    const midi = STANDARD_TUNING[string] + fret
+    setSelected({ string, fret, midi })
+    await run(() => audioEngine.playNote(midi))
+  }
+  return <><section className="intro-card"><div><p className="eyebrow">01 / INTERACTIVE INSTRUMENT</p><h2>Hear every position.</h2><p>Tap a string and fret. The pitch comes from standard tuning, including the correct octave.</p></div><div className="pulse-icon">♪</div></section>
+    <section className="card"><div className="section-head"><div><h3>SVG fretboard</h3><p>Standard tuning · E A D G B E</p></div><button className="subtle-button" onClick={() => setShowAll(!showAll)}>{showAll ? 'Hide labels' : 'Show labels'}</button></div>
+      <div className="fret-pages" role="group" aria-label="Fret range">{['Open–4', '5–9', '10–12'].map((label, i) => <button key={label} className={page === i ? 'active' : ''} onClick={() => setPage(i)}>{label}</button>)}</div>
+      <svg className="fretboard" viewBox="0 0 320 310" role="group" aria-label="Six-string guitar fretboard">
+        <rect x="37" y="28" width="274" height="252" rx="12" fill="#1d2632"/>
+        {frets.map((fret, col) => <g key={fret}><line x1={50 + col * 58} y1="30" x2={50 + col * 58} y2="278" stroke={fret === 0 ? '#e9ae6a' : '#475364'} strokeWidth={fret === 0 ? 5 : 2}/><text x={50 + col * 58} y="302" textAnchor="middle" className="svg-fret-label">{fret}</text></g>)}
+        {strings.map((string, row) => <g key={string}><line x1="40" y1={53 + row * 43} x2="307" y2={53 + row * 43} stroke="#8d9dad" strokeWidth={1.2 + (5 - row) * 0.35}/><text x="14" y={58 + row * 43} className="svg-string-label">{['E', 'A', 'D', 'G', 'B', 'e'][string]}</text>
+          {frets.map((fret, col) => { const x = 50 + col * 58; const y = 53 + row * 43; const midi = STANDARD_TUNING[string] + fret; const active = selected?.string === string && selected.fret === fret
+            return <g key={`${string}-${fret}`} onClick={() => void choose(string, fret)} onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); void choose(string, fret) } }} role="button" tabIndex={0} aria-label={`String ${6 - string}, fret ${fret}, ${noteName(midi)}`}><rect x={x - 27} y={y - 21} width="54" height="42" fill="transparent"/><circle cx={x} cy={y} r={active ? 17 : 13} fill={active ? '#ee765e' : '#324356'} stroke={active ? '#ffd5a5' : '#627284'} strokeWidth="1.5"/><text x={x} y={y + 4} textAnchor="middle" className="svg-note">{showAll || active ? noteName(midi).replace(/\d/, '') : '•'}</text></g> })}</g>)}
+      </svg>
+      <details className="position-controls"><summary>Choose a position with form controls</summary><div className="field-row"><label>String<select value={accessibleString} onChange={e => setAccessibleString(Number(e.target.value))}>{[1, 2, 3, 4, 5, 6].map(n => <option key={n} value={n}>String {n}</option>)}</select></label><label>Fret<select value={accessibleFret} onChange={e => setAccessibleFret(Number(e.target.value))}>{Array.from({ length: 13 }, (_, n) => <option key={n} value={n}>Fret {n}</option>)}</select></label></div><button className="secondary-button" onClick={() => void choose(6 - accessibleString, accessibleFret)}>Select and play {noteName(STANDARD_TUNING[6 - accessibleString] + accessibleFret)}</button></details>
+      <div className="selected-note"><div><span className="eyebrow">SELECTED POSITION</span><strong>{selected ? noteName(selected.midi) : 'Tap a note'}</strong><small>{selected ? `String ${6 - selected.string} · fret ${selected.fret} · ${Math.round(midiToFrequency(selected.midi))} Hz` : 'The note and octave appear here'}</small></div>{selected && <button className="primary-button compact" onClick={() => void run(() => audioEngine.playNote(selected.midi))}>▶ Replay</button>}</div>
+    </section></>
+}
+
+function Explore({ run, stop }: { run: (fn: () => Promise<unknown>) => Promise<void>; stop: () => void }) {
+  const [root, setRoot] = useState('C')
+  const [quality, setQuality] = useState('maj7')
+  const [style, setStyle] = useState<ChordStyle>('block')
+  const [inversion, setInversion] = useState(0)
+  const [interval, setInterval] = useState(7)
+  const [mode, setMode] = useState<IntervalMode>('ascending')
+  const [scale, setScale] = useState<ScaleName>('major')
+  const symbol = root + quality
+  const chord = parseChord(symbol)
+  const voicing = chordVoicing(symbol, inversion)
+  return <><section className="intro-card"><div><p className="eyebrow">02 / SOUND EXPLORER</p><h2>Build it. Then hear it.</h2><p>Compare intervals, chord qualities, inversions and scales in one place.</p></div><div className="pulse-icon">♫</div></section>
+    <section className="card"><div className="section-head"><div><h3>Chord player</h3><p>Block or arpeggiated · inversion aware</p></div></div><div className="field-row"><label>Root<select value={root} onChange={e => setRoot(e.target.value)}>{SHARPS.map(n => <option key={n}>{n}</option>)}</select></label><label>Quality<select value={quality} onChange={e => { setQuality(e.target.value); setInversion(0) }}>{Object.keys(CHORD_INTERVALS).map(q => <option key={q} value={q}>{q === 'major' ? 'Major' : q === 'minor' ? 'Minor' : q}</option>)}</select></label></div>
+      <div className="field-row"><label>Style<select value={style} onChange={e => setStyle(e.target.value as ChordStyle)}><option value="block">Block chord</option><option value="up">Ascending arpeggio</option><option value="down">Descending arpeggio</option></select></label><label>Inversion<select value={inversion} onChange={e => setInversion(Number(e.target.value))}>{chordPitchClasses(chord).map((_, i) => <option key={i} value={i}>{i === 0 ? 'Root position' : `${i}${i === 1 ? 'st' : i === 2 ? 'nd' : 'rd'} inversion`}</option>)}</select></label></div>
+      <div className="note-chips">{voicing.map((midi, i) => <span key={i}>{noteName(midi)}</span>)}</div><div className="button-row"><button className="primary-button" onClick={() => void run(() => audioEngine.playChord(symbol, style, inversion))}>▶ Play {symbol}</button><button className="secondary-button" onClick={stop}>■ Stop</button></div>
+    </section>
+    <section className="card"><div className="section-head"><div><h3>Interval player</h3><p>Melodic or harmonic · tap to replay</p></div></div><div className="field-row"><label>Interval<select value={interval} onChange={e => setInterval(Number(e.target.value))}>{INTERVALS.map(i => <option key={i.name} value={i.semitones}>{i.name} · {i.semitones} semitones</option>)}</select></label><label>Playback<select value={mode} onChange={e => setMode(e.target.value as IntervalMode)}><option value="ascending">Ascending</option><option value="descending">Descending</option><option value="harmonic">Together</option></select></label></div><div className="button-row"><button className="primary-button" onClick={() => void run(() => audioEngine.playInterval(60, interval, mode))}>▶ Play interval</button><button className="secondary-button" onClick={() => void run(() => audioEngine.playNote(60))}>Reference C4</button></div></section>
+    <section className="card"><div className="section-head"><div><h3>Scale player</h3><p>Hear each degree in order</p></div></div><label>Scale<select value={scale} onChange={e => setScale(e.target.value as ScaleName)}><option value="major">Major</option><option value="minor">Natural minor</option><option value="pentatonic">Major pentatonic</option><option value="minorPentatonic">Minor pentatonic</option><option value="blues">Blues</option></select></label><div className="note-chips">{scaleNotes(60 + SHARPS.findIndex(n => n === root), scale).map((midi, i) => <span key={i}>{noteName(midi)}</span>)}</div><button className="primary-button" onClick={() => void run(() => audioEngine.playScale(60 + SHARPS.findIndex(n => n === root), scale))}>▶ Play scale</button></section>
+  </>
+}
+
+function Progressions({ run, stop, playing, setPlaying }: { run: (fn: () => Promise<unknown>) => Promise<void>; stop: () => void; playing: boolean; setPlaying: (value: boolean) => void }) {
+  const { options, update } = useAudioSettings()
+  const [selected, setSelected] = useState(0)
+  const [chords, setChords] = useState<ProgressionChord[]>(EXAMPLES[0].chords.map(symbol => ({ symbol, beats: 4 })))
+  const [timeSignature, setTimeSignature] = useState(4)
+  const [loop, setLoop] = useState(false)
+  const [active, setActive] = useState(-1)
+  const [edit, setEdit] = useState('')
+  const plan = (() => { try { return planProgression(chords, options.tempo) } catch { return [] } })()
+  function choose(i: number) { stop(); setActive(-1); setSelected(i); setChords(EXAMPLES[i].chords.map(symbol => ({ symbol, beats: 4 }))) }
+  function play() { void run(() => audioEngine.playProgression(chords, { bpm: options.tempo, timeSignature, loop, metronome: options.metronome, onChord: setActive, onStop: () => { setActive(-1); setPlaying(false) } })) }
+  function addChord() { try { parseChord(edit); setChords([...chords, { symbol: edit.trim(), beats: timeSignature }]); setEdit('') } catch { /* invalid chord remains editable */ } }
+  return <><section className="intro-card"><div><p className="eyebrow">03 / HARMONY IN MOTION</p><h2>Follow the changes.</h2><p>Tone.Transport schedules each chord and keeps the visual highlight in sync.</p></div><div className="pulse-icon">▥</div></section>
+    <section className="card"><div className="section-head"><div><h3>Progression sequencer</h3><p>Choose a study pattern or edit your own</p></div></div><div className="example-grid">{EXAMPLES.map((ex, i) => <button key={ex.title} className={selected === i ? 'active' : ''} onClick={() => choose(i)}><strong>{ex.title}</strong><small>{ex.chords.join(' → ')}</small></button>)}</div>
+      <div className="chord-track">{chords.map((chord, i) => <div key={`${i}-${chord.symbol}`} className={`track-chord ${active === i ? 'playing' : ''}`}><span>{i + 1 < 10 ? `0${i + 1}` : i + 1}</span><strong>{chord.symbol}</strong><select aria-label={`${chord.symbol} duration in beats`} value={chord.beats} onChange={e => setChords(chords.map((c, j) => j === i ? { ...c, beats: Number(e.target.value) } : c))}>{[1, 2, 3, 4, 6, 8].map(n => <option key={n} value={n}>{n} beats</option>)}</select><div><button aria-label={`Play ${chord.symbol}`} onClick={() => void run(() => audioEngine.playChord(chord.symbol))}>▶</button><button aria-label={`Remove ${chord.symbol}`} onClick={() => setChords(chords.filter((_, j) => j !== i))}>×</button></div></div>)}</div>
+      <div className="field-row"><label>Tempo · {options.tempo} BPM<input type="range" min="50" max="180" value={options.tempo} onChange={e => void update({ tempo: Number(e.target.value) })}/></label><label>Time signature<select value={timeSignature} onChange={e => setTimeSignature(Number(e.target.value))}><option value={3}>3/4</option><option value={4}>4/4</option><option value={6}>6/4</option></select></label></div><div className="toggle-row"><label><input type="checkbox" checked={loop} onChange={e => setLoop(e.target.checked)}/> Loop</label><label><input type="checkbox" checked={options.metronome} onChange={e => void update({ metronome: e.target.checked })}/> Metronome</label></div>
+      <div className="button-row"><button className="primary-button" disabled={!chords.length} onClick={play}>{playing ? '↻ Restart' : '▶ Play progression'}</button><button className="secondary-button" onClick={() => { stop(); setActive(-1) }}>■ Stop</button></div>
+      <div className="add-row"><input aria-label="Chord symbol" placeholder="Add chord, e.g. Am7 or G/B" value={edit} onChange={e => setEdit(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') addChord() }}/><button onClick={addChord}>+ Add</button></div><p className="helper">Chord durations are in beats. Common symbols include C, Cm, Cmaj7, C7, Dm7, G/B and Fm.</p>
+      <div className="voice-note"><span>VOICE LEADING</span><p>{plan.map(p => `${p.chord.symbol}: ${p.notes.map(n => noteName(n)).join(' ')}`).join('   ·   ')}</p></div>
+    </section></>
+}
+
+function Compare({ run, stop }: { run: (fn: () => Promise<unknown>) => Promise<void>; stop: () => void }) {
+  const [index, setIndex] = useState(0)
+  const [heard, setHeard] = useState({ a: false, b: false })
+  const [last, setLast] = useState<'a' | 'b'>('a')
+  const item = COMPARISONS[index]
+  function select(i: number) { stop(); setIndex(i); setHeard({ a: false, b: false }) }
+  function play(side: 'a' | 'b') { setLast(side); setHeard(v => ({ ...v, [side]: true })); void run(() => audioEngine.playSequence(comparisonEvents(item, side))) }
+  return <><section className="intro-card"><div><p className="eyebrow">04 / CRITICAL LISTENING</p><h2>Hear the difference.</h2><p>Matched register, duration and level help you focus on what changes musically.</p></div><div className="pulse-icon">⇄</div></section>
+    <section className="card"><label>Comparison<select value={index} onChange={e => select(Number(e.target.value))}>{COMPARISONS.map((c, i) => <option key={c.id} value={i}>{c.category} · {c.title}</option>)}</select></label><div className="ab-grid"><div><span className="eyebrow">VERSION A</span><h3>{item.a.join(' → ')}</h3><button className="primary-button" aria-label="Play A" onClick={() => play('a')}>▶ Play A</button></div><div><span className="eyebrow">VERSION B</span><h3>{item.b.join(' → ')}</h3><button className="primary-button" aria-label="Play B" onClick={() => play('b')}>▶ Play B</button></div></div><div className="button-row"><button className="secondary-button" aria-label={`Replay ${last.toUpperCase()}`} onClick={() => play(last)}>↻ Replay {last.toUpperCase()}</button><button className="secondary-button" onClick={stop}>■ Stop</button></div>
+      {heard.a && heard.b ? <div className="explanation"><span>WHAT CHANGED</span><strong>{item.difference}</strong><p>{item.explanation}</p></div> : <p className="helper">Play both versions to reveal the listening guide.</p>}
+    </section></>
+}
+
+function EarTraining({ run, stop }: { run: (fn: () => Promise<unknown>) => Promise<void>; stop: () => void }) {
+  const { options } = useAudioSettings()
+  const [type, setType] = useState<EarType>('interval')
+  const [question, setQuestion] = useState<EarQuestion>(() => makeEarQuestion('interval'))
+  const [answer, setAnswer] = useState<string | null>(null)
+  const [replays, setReplays] = useState(0)
+  const [started, setStarted] = useState(0)
+  const [saveError, setSaveError] = useState('')
+  const [mastery, setMastery] = useState<number | null>(null)
+  const [history, setHistory] = useState<AudioAttempt[]>([])
+  useEffect(() => { void db.attempts.orderBy('timestamp').reverse().limit(10).toArray().then(setHistory).catch(() => setSaveError('Practice history is unavailable on this device.')) }, [answer])
+  function next(nextType = type) { stop(); setType(nextType); setQuestion(makeEarQuestion(nextType)); setAnswer(null); setReplays(0); setStarted(0); setMastery(null); setSaveError('') }
+  function play() {
+    if (options.silent || !options.enabled) { void run(() => audioEngine.playSequence(question.events)); return }
+    void run(() => audioEngine.playSequence(question.events)).then(() => {
+      if (audioEngine.isReady) { if (started) setReplays(v => v + 1); else setStarted(performance.now()) }
+    })
+  }
+  async function submit(choice: string) {
+    if (answer !== null) return
+    setAnswer(choice); stop()
+    try {
+      const record = await saveAttempt({ id: crypto.randomUUID(), sessionId: question.id, exerciseType: question.type, topicId: `ear.${question.type}`,
+        question, response: choice, expected: question.answer, correct: choice === question.answer,
+        responseMs: started ? Math.max(0, Math.round(performance.now() - started)) : 0, replays, difficulty: 1, timestamp: Date.now() })
+      setMastery(record.masteryAfter)
+    } catch { setSaveError('Answer checked, but could not be saved. Check browser storage and try again.') }
+  }
+  return <><section className="intro-card"><div><p className="eyebrow">05 / EAR TRAINING</p><h2>Listen before you look.</h2><p>Audio questions hide the answer until you submit. Replaying never counts against you.</p></div><div className="pulse-icon">◉</div></section>
+    <section className="card"><div className="type-pills">{EAR_TYPES.map(t => <button key={t.id} className={type === t.id ? 'active' : ''} onClick={() => next(t.id)}>{t.label}</button>)}</div><div className="question-box"><span className="eyebrow">LISTENING QUESTION</span><h3>{question.prompt}</h3><p>Listen as often as you need, then choose an answer.</p><div className="button-row"><button className="primary-button" onClick={play}>{started ? '↻ Replay audio' : '▶ Play question'}</button>{question.reference && <button className="secondary-button" onClick={() => void run(() => audioEngine.playSequence(question.reference!))}>Reference tonic</button>}</div><small>Replays: {replays}</small></div>
+      {(options.silent || !options.enabled) && <p className="helper">Turn sound on to answer listening questions. Fretboard and theory exploration remain available in silent mode.</p>}
+      <div className="choice-grid">{question.choices.map(choice => <button key={choice} disabled={answer !== null || options.silent || !options.enabled || !started} className={answer !== null ? choice === question.answer ? 'correct' : choice === answer ? 'wrong' : '' : ''} onClick={() => void submit(choice)}>{choice}</button>)}</div>
+      {answer !== null && <div className={`feedback ${answer === question.answer ? 'success' : ''}`} role="status"><strong>{answer === question.answer ? 'Correct — well heard.' : `Not quite. The answer is ${question.answer}.`}</strong><p>{question.explanation}</p><p>{question.reveal}</p><span>Listen for: {question.focusNotes}</span>{mastery !== null && <small>Recent topic accuracy: {mastery}%</small>}<button className="primary-button" onClick={() => next()}>Next question →</button></div>}
+      {saveError && <div className="notice" role="alert">{saveError}</div>}
+    </section>
+    <section className="card"><div className="section-head"><div><h3>Recent practice</h3><p>Stored locally in this browser</p></div></div>{history.length ? <div className="history">{history.map(a => <div key={a.id}><span>{a.correct ? '✓' : '·'}</span><strong>{a.topicId.replace('ear.', '')}</strong><small>{a.correct ? 'Correct' : `Review ${a.expected}`} · {a.replays} replays</small></div>)}</div> : <p className="helper">Your answered questions will appear here.</p>}</section>
+  </>
+}
+
+function Settings() {
+  const { options, update } = useAudioSettings()
+  return <><section className="intro-card"><div><p className="eyebrow">06 / PERSONAL STUDIO</p><h2>Your sound, your pace.</h2><p>Settings are saved on this device. Silent practice works without unlocking audio.</p></div><div className="pulse-icon">⚙</div></section>
+    <section className="card settings-card"><div className="setting"><div><strong>Audio enabled</strong><p>Allow sound during practice</p></div><input type="checkbox" checked={options.enabled} onChange={e => void update({ enabled: e.target.checked })} aria-label="Audio enabled"/></div><div className="setting"><div><strong>Silent mode</strong><p>Practice without sound while commuting</p></div><input type="checkbox" checked={options.silent} onChange={e => void update({ silent: e.target.checked })} aria-label="Silent mode"/></div>
+      <label>Instrument<select value={options.instrument} onChange={e => void update({ instrument: e.target.value as 'pluck' | 'keys' })}><option value="pluck">Clean guitar-style · modeled string</option><option value="keys">Clean keys · synthesized</option></select></label><p className="helper">Both sounds are generated locally. The guitar-style sound is a modeled string, not a recorded guitar sample. No network connection is required.</p>
+      <label>Master volume · {Math.round(options.volume * 100)}%<input type="range" min="0" max="1" step="0.01" value={options.volume} onChange={e => void update({ volume: Number(e.target.value) })}/></label><label>Playback tempo · {options.tempo} BPM<input type="range" min="50" max="180" value={options.tempo} onChange={e => void update({ tempo: Number(e.target.value) })}/></label><label>Note duration · {options.noteDuration.toFixed(2)} s<input type="range" min="0.15" max="1.2" step="0.05" value={options.noteDuration} onChange={e => void update({ noteDuration: Number(e.target.value) })}/></label><div className="setting"><div><strong>Metronome</strong><p>Click during progression playback</p></div><input type="checkbox" checked={options.metronome} onChange={e => void update({ metronome: e.target.checked })} aria-label="Metronome"/></div>
+      <button className="secondary-button" onClick={() => void audioEngine.activate()}>Activate audio</button><p className="helper">Mobile browsers require a tap before sound starts. Playback pauses when the app is backgrounded; tap again after an interruption.</p>
+    </section></>
+}

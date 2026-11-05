@@ -1,0 +1,50 @@
+import { test, expect } from '@playwright/test'
+
+test('fretboard note selection and silent mode', async ({ page }) => {
+  await page.goto('/')
+  await expect(page.getByRole('heading', { name: 'Fretboard', exact: true })).toBeVisible()
+  await page.locator('svg.fretboard g[aria-label="String 1, fret 0, E4"]').click()
+  await expect(page.getByText('String 1 · fret 0', { exact: false })).toBeVisible()
+  await page.getByRole('button', { name: 'Turn silent mode on' }).click()
+  await expect(page.getByRole('button', { name: 'Turn sound on' })).toBeVisible()
+  await page.reload()
+  await expect(page.getByRole('button', { name: 'Turn sound on' })).toBeVisible()
+  await page.getByRole('button', { name: 'Ear training', exact: true }).click()
+  await expect(page.locator('.choice-grid button').first()).toBeDisabled()
+})
+
+test('progression and A/B controls can start and stop', async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Progressions', exact: true }).click()
+  await page.getByRole('button', { name: 'Play progression' }).click()
+  await expect(page.getByRole('button', { name: 'Restart' })).toBeVisible()
+  await page.getByRole('button', { name: /Stop/ }).click()
+  await page.getByRole('button', { name: 'Compare', exact: true }).click()
+  await page.getByRole('button', { name: 'Play A', exact: true }).click()
+  await page.getByRole('button', { name: 'Play B', exact: true }).click()
+  await expect(page.getByText('WHAT CHANGED')).toBeVisible()
+})
+
+test('ear question validates and persists after reload', async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Ear training', exact: true }).click()
+  await page.getByRole('button', { name: 'Play question' }).click()
+  const choices = page.locator('.choice-grid button')
+  await choices.first().click()
+  await expect(page.getByRole('button', { name: 'Next question' })).toBeVisible()
+  await page.reload()
+  await page.getByRole('button', { name: 'Ear training', exact: true }).click()
+  await expect(page.locator('.history > div')).toHaveCount(1)
+})
+
+test('phone touch can distinguish neighboring fret positions without page overflow', async ({ browser }) => {
+  const context = await browser.newContext({ viewport: { width: 320, height: 568 }, isMobile: true, hasTouch: true })
+  const page = await context.newPage()
+  await page.goto('/')
+  await page.locator('svg.fretboard g[aria-label="String 1, fret 0, E4"]').tap()
+  await expect(page.getByText('String 1 · fret 0', { exact: false })).toBeVisible()
+  await page.locator('svg.fretboard g[aria-label="String 1, fret 1, F4"]').tap()
+  await expect(page.getByText('String 1 · fret 1', { exact: false })).toBeVisible()
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
+  await context.close()
+})
