@@ -4,7 +4,7 @@
     "module": "ESNext", "moduleResolution": "bundler", "jsx": "react-jsx",
     "strict": true, "noEmit": true, "skipLibCheck": true,
     "allowImportingTsExtensions": true, "resolveJsonModule": true,
-    "isolatedModules": true, "types": ["vite/client", "vitest/globals"]
+    "isolatedModules": true, "types": ["vite/client", "vitest/globals", "node"]
   },
   "include": ["src", "vite.config.ts", "playwright.config.ts"]
 }
