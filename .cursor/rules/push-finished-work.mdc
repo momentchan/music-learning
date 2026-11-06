@@ -1,0 +1,16 @@
+---
+description: Commit and push finished progress to main without waiting to be asked
+alwaysApply: true
+---
+
+# Push finished progress
+
+When a requested change is implemented and checked, commit it and push to `main` in the same turn. Do not wait for the user to say push.
+
+Push a finished slice: a behavior change, a fix, or a content change the user asked for. Leave a half-done edit, a failing check, or an in-progress experiment uncommitted.
+
+- Commit only the files for that slice. Leave `packages/` untracked.
+- Do not commit secrets (`.env`, credentials).
+- Use a short imperative commit message, in the style of recent commits.
+- Push with `git push origin HEAD`. Never force-push.
+- If the push fails, say so and leave the commit local.
