@@ -111,7 +111,7 @@ const T1: SkillNode[] = [
       definition: '每條弦的規則都一樣：從空弦音往上數，全音隔 2 格、E–F 與 B–C 隔 1 格。第 12 格是空弦的高八度，之後重複。',
       why: '找得到每條弦上的音，才能把音階、和弦音和旋律放到指板上任何位置。',
       example: '第 3 弦（G）：A 在第 2 格、B 在第 4 格、C 在第 5 格。',
-      mistake: '只靠「數格子」。數格子慢又容易錯；試著用八度形狀和已知的根音當地標。',
+      mistake: '只靠「數格子」。數格子慢又容易錯；用已經知道的音當地標，再看 E–F、B–C 是不是只隔一格。',
     },
     bridge: { id: 'bridge.fret.naturals.all', minutes: 3, text: '挑一個音（例如 C），在六條弦上各找出一個 C 並彈出來，從第 6 弦到第 1 弦，再從第 1 弦回到第 6 弦。' },
   },
@@ -282,12 +282,15 @@ const index = new Map(NODES.map(n => [n.id, n]))
 export const nodeById = (id: string): SkillNode | undefined => index.get(id)
 export const availableNodes = () => NODES.filter(n => n.availability === 'available')
 
+/** Still in the engine so older records resolve, but not shown or scheduled. */
+export const UNLISTED_NODE_IDS = new Set(['fret.octaves'])
+
 export interface Pathway { id: string; short: string; title: string; description: string; steps: string[] }
 export const PATHWAYS: readonly Pathway[] = [
   { id: 'start', short: '★ 從這裡開始', title: '★ 從這裡開始 Start Here', description: '給已經能用封閉和弦伴奏的人。先把每條弦的音名補完，再把大調級數、順階和功能練穩。即興、進階聽力和寫歌排在這之後，不會一開始全部塞進來。',
     steps: ['fret.naturals.all', 'fret.accidentals', 'interval.shapes', 'scale.major', 'key.diatonic', 'harmony.basic'] },
-  { id: 'foundations', short: '複習基礎', title: '可選複習 · 空弦、開放和弦、八度', description: '已經會伴奏的人可以整段跳過。空弦音名、開放和弦、基本刷法和八度形狀留在這裡，不進每日新內容。',
-    steps: ['fret.open', 'chord.diagram', 'chord.open', 'rhythm.pulse', 'rhythm.strum', 'fret.naturals.low', 'fret.octaves', 'interval.basics', 'triad.basic', 'ear.basic'] },
+  { id: 'foundations', short: '複習基礎', title: '可選複習 · 空弦、開放和弦、基本刷法', description: '已經會伴奏的人可以整段跳過。空弦音名、開放和弦指型和基本刷法留在這裡，不進每日新內容。',
+    steps: ['fret.open', 'chord.diagram', 'chord.open', 'rhythm.pulse', 'rhythm.strum', 'fret.naturals.low', 'interval.basics', 'triad.basic', 'ear.basic'] },
   { id: 'fretboard', short: 'A 指板', title: 'A — 指板精通 Fretboard Mastery', description: '補完每條弦的音名、升降與音程形狀，再到弦組三和弦、CAGED 和把位。',
     steps: ['fret.naturals.all', 'fret.accidentals', 'interval.shapes', 'triad.stringsets', 'fret.caged', 'scale.positions'] },
   { id: 'harmony', short: 'B 和聲', title: 'B — 理解和聲 Harmony Understanding', description: '先把音階級數和順階練穩，再往功能、終止、次屬、借用與共同音走。',

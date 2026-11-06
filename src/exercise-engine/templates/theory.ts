@@ -1,12 +1,18 @@
 import { createRng, pick, shuffle } from '../../lib/rng'
 import { chordNotes, chordSymbol, QUALITY_LABEL, type ChordQuality } from '../../music-theory/chords'
+import { STANDARD, positionsOfPc, type StringNumber } from '../../music-theory/guitar'
 import { intervalBetween, intervalLabel, parseInterval, transposeUp } from '../../music-theory/intervals'
 import { diatonicChords, keySignature, majorDegreeFunctions, scaleNotes } from '../../music-theory/keys'
 import { LETTERS, letterIndex, noteId, noteLabel, parseNote, pitchClass, type SpelledNote } from '../../music-theory/notes'
-import type { ChoiceQuestion, ConstructQuestion, Difficulty, ExerciseTemplate } from '../types'
+import type { ChoiceQuestion, ConstructQuestion, Difficulty, ExerciseTemplate, FretLocateQuestion } from '../types'
 import { itemParts, questionBase } from './common'
 
 const toMidi = (n: SpelledNote, octave = 4) => 12 * (octave + 1) + pitchClass(n)
+const BOARD_STRINGS: StringNumber[] = [6, 5, 4, 3, 2, 1]
+function landmark(rng: () => number, pc: number, avoid: StringNumber) {
+  const string = pick(rng, BOARD_STRINGS.filter(s => s !== avoid))
+  return { string, fret: positionsOfPc(STANDARD, pc, 0, 12, [string])[0]?.fret ?? 0 }
+}
 const ascending = (notes: SpelledNote[], start = 4) => {
   let previous = -1
   return notes.map(n => { let m = toMidi(n, start); while (m <= previous) m += 12; previous = m; return m })
@@ -186,6 +192,27 @@ export const scaleMajor: ExerciseTemplate[] = [
       } satisfies ChoiceQuestion
     },
   },
+  {
+    id: 'scale.major.locate', nodeId: 'scale.major', kind: 'fret-locate', version: 1, evidenceLevel: 'locate', stage: 'locate', title: '在指板上找級數',
+    items: () => ALL_SCALE_KEYS.map(k => `scale.major.${k}`),
+    generate(seed, { difficulty, itemId }) {
+      const rng = createRng(seed)
+      const tonic = pickKey(rng, difficulty, itemId, 'scale.major.')
+      const scale = scaleNotes(tonic, 'major')
+      const degree = 1 + Math.floor(rng() * (difficulty === 1 ? 5 : 7))
+      const target = scale[degree - 1]
+      const string = pick(rng, BOARD_STRINGS)
+      const root = landmark(rng, pitchClass(tonic), string)
+      return {
+        ...questionBase(this, seed, difficulty), kind: 'fret-locate', tuning: [...STANDARD.midi], targetPc: pitchClass(target), targetLabel: noteLabel(target),
+        string, minFret: 0, maxFret: 12, reference: { string: root.string, fret: root.fret, label: '1' },
+        prompt: `指板上標的是 ${noteLabel(tonic)} 大調的主音。在第 ${string} 弦點出第 ${degree} 級。`,
+        reviewItemIds: [`scale.major.${noteId(tonic)}`],
+        explanation: `${noteLabel(tonic)} 大調第 ${degree} 級是 ${noteLabel(target)}。第 ${string} 弦上這個音的格子都算對。`,
+        display: { positions: [[root.string, root.fret, '1']] },
+      } satisfies FretLocateQuestion
+    },
+  },
 ]
 
 // ---- Keys & diatonic chords -------------------------------------------------------------
@@ -253,6 +280,25 @@ export const keyDiatonic: ExerciseTemplate[] = [
         prompt: `${noteLabel(tonic)} 大調的調號是？`, reviewItemIds: [`key.sig.${noteId(tonic)}`],
         explanation: `${noteLabel(tonic)} 大調：${answer}${sig.accidentals.length ? `（${sig.accidentals.map(noteLabel).join(' ')}）` : ''}。升記號順序 F C G D A E B；降記號順序 B E A D G C F。`,
       } satisfies ChoiceQuestion
+    },
+  },
+  {
+    id: 'key.diatonic.locate', nodeId: 'key.diatonic', kind: 'fret-locate', version: 1, evidenceLevel: 'locate', stage: 'locate', title: '在指板上找順階根音',
+    items: keyItems,
+    generate(seed, { difficulty, itemId }) {
+      const rng = createRng(seed)
+      const { tonic, degree, chords } = keyAndDegree(rng, difficulty, itemId)
+      const target = chords[degree - 1]
+      const string = pick(rng, BOARD_STRINGS)
+      const root = landmark(rng, pitchClass(tonic), string)
+      return {
+        ...questionBase(this, seed, difficulty), kind: 'fret-locate', tuning: [...STANDARD.midi], targetPc: pitchClass(target.chord.root), targetLabel: noteLabel(target.chord.root),
+        string, minFret: 0, maxFret: 12, reference: { string: root.string, fret: root.fret, label: '1' },
+        prompt: `指板上標的是 ${noteLabel(tonic)} 大調的主音。在第 ${string} 弦點出 ${target.numeral} 的根音。`,
+        reviewItemIds: [`key.${noteId(tonic)}.${degree}`],
+        explanation: `${noteLabel(tonic)} 大調的 ${target.numeral}，根音是 ${noteLabel(target.chord.root)}。`,
+        display: { positions: [[root.string, root.fret, '1']] },
+      } satisfies FretLocateQuestion
     },
   },
 ]

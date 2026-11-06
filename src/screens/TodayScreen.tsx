@@ -45,7 +45,7 @@ export function TodayScreen() {
         {[3, 5, 10].map(m => <button key={m} role="radio" aria-checked={minutes === m} className={minutes === m ? 'active' : ''} onClick={() => setMinutes(m)}>{m} 分鐘</button>)}
       </div>
       <button className="primary-button wide big" disabled={starting} onClick={() => void start()}>▶ 開始 {minutes} 分鐘練習</button>
-      <p className="helper">手機上就能做完：先在指板上點音，再拼幾題級數。開著聲音會加聽力。吉他的部分先排到稍後，回家再彈。隨時可以離開。</p>
+      <p className="helper">在指板上點出位置就能做完，不排純文字問答。吉他的部分先排到稍後，回家再彈。隨時可以離開。</p>
       {error && <p className="notice" role="alert">{error}</p>}
     </section>
 

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { navigate } from '../app/router'
-import { NODES, PATHWAYS, nodeById } from '../curriculum/nodes'
+import { NODES, PATHWAYS, UNLISTED_NODE_IDS, nodeById } from '../curriculum/nodes'
 import { repository } from '../database/repository'
 import { itemLabel } from '../learning/labels'
 import { NODE_STATE_LABEL, pathwayCompletion, weakItems } from '../learning/mastery'
@@ -14,7 +14,7 @@ export function ProgressScreen() {
   const [sessions, setSessions] = useState<PracticeSession[]>([])
   useEffect(() => { repository.listSessions(12).then(setSessions).catch(() => setSessions([])) }, [learning.attempts.length])
   const weak = useMemo(() => weakItems(learning.reviews.values(), 12), [learning.reviews])
-  const nodes = NODES.filter(n => n.availability === 'available')
+  const nodes = NODES.filter(n => n.availability === 'available' && !UNLISTED_NODE_IDS.has(n.id))
 
   return <div className="progress">
     <section className="card">

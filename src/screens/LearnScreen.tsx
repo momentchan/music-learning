@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { navigate } from '../app/router'
-import { NODES, PATHWAYS, nodeById, type SkillNode } from '../curriculum/nodes'
+import { NODES, PATHWAYS, UNLISTED_NODE_IDS, nodeById, type SkillNode } from '../curriculum/nodes'
 import { templatesForNode } from '../exercise-engine/registry'
 import { t } from '../i18n/zh-TW'
 import { NODE_STATE_LABEL, pathwayCompletion, type NodeMastery } from '../learning/mastery'
@@ -42,7 +42,7 @@ export function LearnScreen() {
     </section>
     {([1, 2, 3] as const).map(tier => <section className="card" key={tier}>
       <h3>{tier === 1 ? '第 1 層 · 基礎 Foundations' : tier === 2 ? '第 2 層 · 連結 Connecting' : '第 3 層 · 創作 Creating'}</h3>
-      <ul className="node-list">{NODES.filter(n => n.tier === tier).map(n => <NodeRow key={n.id} node={n}/>)}</ul>
+      <ul className="node-list">{NODES.filter(n => n.tier === tier && !UNLISTED_NODE_IDS.has(n.id)).map(n => <NodeRow key={n.id} node={n}/>)}</ul>
     </section>)}
   </div>
 }
