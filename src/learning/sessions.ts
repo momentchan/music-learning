@@ -24,7 +24,7 @@ export function adaptiveDifficulty(mastery: NodeMastery | undefined, preference:
 const usable = (t: ExerciseTemplate, audio: boolean) => audio || !t.requiresAudio
 
 /** Phone practice along Start Here. These nodes need no guitar. */
-const COMMUTE_NECK = ['fret.octaves', 'fret.naturals.all', 'fret.accidentals', 'interval.shapes']
+const COMMUTE_NECK = ['fret.naturals.all', 'fret.accidentals', 'interval.shapes']
 const COMMUTE_THEORY = ['scale.major', 'key.diatonic', 'harmony.basic']
 const COMMUTE_EAR = 'ear.basic'
 

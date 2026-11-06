@@ -40,7 +40,7 @@ export function TodayScreen() {
 
     <section className="card start-card">
       <p className="eyebrow">今日練習 TODAY</p>
-      <h2>{due.length ? `${due.length} 個項目到期複習` : learning.attempts.length ? '今天沒有到期的項目，學點新的吧' : '從八度開始：把第 6、5 弦的音搬到其他弦'}</h2>
+      <h2>{due.length ? `${due.length} 個項目到期複習` : learning.attempts.length ? '今天沒有到期的項目，學點新的吧' : '從六條弦的音名開始：第 6、5 弦以外也能說出來'}</h2>
       <div className="minute-chips" role="radiogroup" aria-label="練習長度">
         {[3, 5, 10].map(m => <button key={m} role="radio" aria-checked={minutes === m} className={minutes === m ? 'active' : ''} onClick={() => setMinutes(m)}>{m} 分鐘</button>)}
       </div>

@@ -151,7 +151,7 @@ const T1: SkillNode[] = [
   },
   {
     id: 'interval.shapes', tier: 1, title: '指板上的音程形狀 Interval Shapes', summary: '相鄰弦上的二度、三度、四度、五度形狀。',
-    prerequisites: ['interval.basics', 'fret.octaves'], canDo: ['從任一根音，在相鄰的高音弦找到 M3、m3、P4、P5'], availability: 'available', estimatedMinutes: 4, related: ['triad.stringsets'],
+    prerequisites: ['interval.basics', 'fret.naturals.all'], canDo: ['從任一根音，在相鄰的高音弦找到 M3、m3、P4、P5'], availability: 'available', estimatedMinutes: 4, related: ['triad.stringsets'],
     content: {
       definition: '相鄰弦大多相差完全四度（5 個半音），所以同一格的上一條弦是 P4，往高把位 2 格是 P5，往低把位 1 格是 M3、2 格是 m3。G–B 弦只差大三度，所以形狀要往高把位多移一格。',
       why: '用形狀思考比一個一個數半音快得多。和弦與音階在指板上的樣子都是這些形狀組合起來的。',
@@ -284,12 +284,12 @@ export const availableNodes = () => NODES.filter(n => n.availability === 'availa
 
 export interface Pathway { id: string; short: string; title: string; description: string; steps: string[] }
 export const PATHWAYS: readonly Pathway[] = [
-  { id: 'start', short: '★ 從這裡開始', title: '★ 從這裡開始 Start Here', description: '給已經能用封閉和弦伴奏的人。先用八度把整個指板補完，再把大調級數、順階和功能練穩。即興、進階聽力和寫歌排在這之後，不會一開始全部塞進來。',
-    steps: ['fret.octaves', 'fret.naturals.all', 'fret.accidentals', 'interval.shapes', 'scale.major', 'key.diatonic', 'harmony.basic'] },
-  { id: 'foundations', short: '複習基礎', title: '可選複習 · 空弦、開放和弦、基本刷法', description: '已經會伴奏的人可以整段跳過。空弦音名、開放和弦指型和基本刷法留在這裡，不進每日新內容。',
-    steps: ['fret.open', 'chord.diagram', 'chord.open', 'rhythm.pulse', 'rhythm.strum', 'fret.naturals.low', 'interval.basics', 'triad.basic', 'ear.basic'] },
-  { id: 'fretboard', short: 'A 指板', title: 'A — 指板精通 Fretboard Mastery', description: '從你已經會的八度出發，補完每條弦的音名、升降與音程形狀，再到弦組三和弦、CAGED 和把位。',
-    steps: ['fret.octaves', 'fret.naturals.all', 'fret.accidentals', 'interval.shapes', 'triad.stringsets', 'fret.caged', 'scale.positions'] },
+  { id: 'start', short: '★ 從這裡開始', title: '★ 從這裡開始 Start Here', description: '給已經能用封閉和弦伴奏的人。先把每條弦的音名補完，再把大調級數、順階和功能練穩。即興、進階聽力和寫歌排在這之後，不會一開始全部塞進來。',
+    steps: ['fret.naturals.all', 'fret.accidentals', 'interval.shapes', 'scale.major', 'key.diatonic', 'harmony.basic'] },
+  { id: 'foundations', short: '複習基礎', title: '可選複習 · 空弦、開放和弦、八度', description: '已經會伴奏的人可以整段跳過。空弦音名、開放和弦、基本刷法和八度形狀留在這裡，不進每日新內容。',
+    steps: ['fret.open', 'chord.diagram', 'chord.open', 'rhythm.pulse', 'rhythm.strum', 'fret.naturals.low', 'fret.octaves', 'interval.basics', 'triad.basic', 'ear.basic'] },
+  { id: 'fretboard', short: 'A 指板', title: 'A — 指板精通 Fretboard Mastery', description: '補完每條弦的音名、升降與音程形狀，再到弦組三和弦、CAGED 和把位。',
+    steps: ['fret.naturals.all', 'fret.accidentals', 'interval.shapes', 'triad.stringsets', 'fret.caged', 'scale.positions'] },
   { id: 'harmony', short: 'B 和聲', title: 'B — 理解和聲 Harmony Understanding', description: '先把音階級數和順階練穩，再往功能、終止、次屬、借用與共同音走。',
     steps: ['scale.major', 'key.diatonic', 'harmony.basic', 'harmony.cadences', 'harmony.secondary-dom', 'harmony.borrowed', 'voice.common-tones'] },
   { id: 'improv', short: 'C 即興', title: 'C — 即興基礎 Improvisation', description: '等指板音程和順階穩了再走這條。五聲把位、目標音、引導音和樂句還沒開放。',

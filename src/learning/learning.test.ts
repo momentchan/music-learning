@@ -141,8 +141,8 @@ describe('mastery and recommendations', () => {
     const reviews = new Map([['fret.open.s1', applyReview(undefined, ev(false, T0 - DAY, false, 'fret.open.s1'))]])
     const recs = recommendations([], reviews, new Map(), T0)
     expect(recs[0]).toMatchObject({ kind: 'due' })
-    expect(recs[1]).toMatchObject({ kind: 'pathway', nodeId: 'fret.octaves' })
-    expect(nextPathwayNode('start', new Map())).toBe('fret.octaves')
+    expect(recs[1]).toMatchObject({ kind: 'pathway', nodeId: 'fret.naturals.all' })
+    expect(nextPathwayNode('start', new Map())).toBe('fret.naturals.all')
   })
 })
 
@@ -161,13 +161,14 @@ describe('session planning', () => {
   it('guided session for a new learner starts Start Here with a learn card', () => {
     const plan = buildGuidedSession({ minutes: 5, seed: 9, now: T0, audio: true, reviews: new Map(), mastery: new Map(), preference: 'auto' })
     const questions = plan.filter(p => p.kind === 'question')
-    expect(plan[0]).toEqual({ kind: 'learn', nodeId: 'fret.octaves' })
+    expect(plan[0]).toEqual({ kind: 'learn', nodeId: 'fret.naturals.all' })
     expect(questions).toHaveLength(10)
-    expect(questions.filter(p => p.kind === 'question' && p.question.nodeId === 'fret.octaves' && p.question.kind === 'fret-locate')).toHaveLength(6)
+    expect(questions.filter(p => p.kind === 'question' && p.question.nodeId === 'fret.naturals.all' && p.question.kind === 'fret-locate')).toHaveLength(6)
+    expect(questions.some(p => p.kind === 'question' && p.question.nodeId === 'fret.octaves')).toBe(false)
     expect(questions.filter(p => p.kind === 'question' && p.question.nodeId === 'scale.major' && p.question.kind === 'construct')).toHaveLength(2)
     expect(questions.filter(p => p.kind === 'question' && p.question.nodeId === 'ear.basic')).toHaveLength(2)
     expect(questions.some(p => p.kind === 'question' && p.question.kind === 'rhythm')).toBe(false)
-    expect(plan.at(-1)).toMatchObject({ kind: 'bridge', nodeId: 'fret.octaves' })
+    expect(plan.at(-1)).toMatchObject({ kind: 'bridge', nodeId: 'fret.naturals.all' })
   })
   it('leaves ear questions out when sound is off', () => {
     const plan = buildGuidedSession({ minutes: 5, seed: 9, now: T0, audio: false, reviews: new Map(), mastery: new Map(), preference: 'auto' })
