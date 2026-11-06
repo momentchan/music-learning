@@ -80,7 +80,8 @@ export default function App() {
 function Fretboard({ run }: { run: (fn: () => Promise<unknown>) => Promise<void> }) {
   const [selected, setSelected] = useState<{ string: number; fret: number; midi: number } | null>(null)
   const [showAll, setShowAll] = useState(false)
-  const [vertical, setVertical] = useState(() => typeof window !== 'undefined' && window.matchMedia('(max-width: 700px)').matches)
+  const [narrow, setNarrow] = useState(() => typeof window !== 'undefined' && window.matchMedia('(max-width: 700px)').matches)
+  const [practiceLayout, setPracticeLayout] = useState<'vertical' | 'horizontal'>(() => (typeof localStorage !== 'undefined' && localStorage.getItem('guitar-lab.practiceLayout') === 'horizontal') ? 'horizontal' : 'vertical')
   const [mode, setMode] = useState<'explore' | 'one-note' | 'random'>('explore')
   const [singleNote, setSingleNote] = useState<string>('C')
   const [randomTarget, setRandomTarget] = useState<ReviewPosition>({ note: 'C', string: 6, fret: 8, midi: 48, reason: 'new' })
@@ -102,9 +103,15 @@ function Fretboard({ run }: { run: (fn: () => Promise<unknown>) => Promise<void>
   const targetCount = positionsForNote(targetNote).length
   const currentAttempts = quizAttempts.filter(attempt => attempt.topicId === `fretboard.note.${targetNote}` && (mode === 'one-note' || (attempt.targetString ?? attempt.string) === randomTarget.string))
   const progress = reviewSummary(quizAttempts, Date.now())
+  // Practice reads top-to-bottom like a chord chart: vertical by default on every screen size.
+  const vertical = narrow || (mode !== 'explore' && practiceLayout === 'vertical')
+  function changePracticeLayout(next: 'vertical' | 'horizontal') {
+    setPracticeLayout(next)
+    try { localStorage.setItem('guitar-lab.practiceLayout', next) } catch { /* preference is optional */ }
+  }
   useEffect(() => {
     const query = window.matchMedia('(max-width: 700px)')
-    const updateLayout = () => setVertical(query.matches)
+    const updateLayout = () => setNarrow(query.matches)
     query.addEventListener('change', updateLayout)
     return () => query.removeEventListener('change', updateLayout)
   }, [])
@@ -173,6 +180,7 @@ function Fretboard({ run }: { run: (fn: () => Promise<unknown>) => Promise<void>
       <div className="fretboard-modes" role="group" aria-label="Fretboard mode"><button className={mode === 'explore' ? 'active' : ''} onClick={() => changeMode('explore')}>Explore</button><button className={mode === 'one-note' ? 'active' : ''} onClick={() => changeMode('one-note')}>One note</button><button className={mode === 'random' ? 'active' : ''} onClick={() => changeMode('random')}>Random review</button></div>
       {mode !== 'explore' && <div className="fretboard-quiz"><div><span className="eyebrow">FIND THE NOTE</span><strong>{targetNote}<em>{mode === 'one-note' ? `${found.length} / ${targetCount} found` : `string ${randomTarget.string}`}</em></strong><small role="status" title={lastResult?.label}>{lastResult ? `${lastResult.label}${roundDone && !lastResult.repeated ? mode === 'one-note' ? ' All positions found!' : ' Nice work!' : ''}` : mode === 'one-note' ? 'Find it on every string' : `${{ new: 'New position', missed: 'Missed position', due: 'Due for review', practice: 'Extra practice' }[randomTarget.reason]} · ${progress.seen}/72 seen`}</small></div>{mode === 'one-note' ? <><label>Practice note<select aria-label="Practice note" value={singleNote} onChange={e => { setSingleNote(e.target.value); resetRound() }}>{SHARPS.map(note => <option key={note}>{note}</option>)}</select></label>{roundDone && <button className="secondary-button" onClick={nextSingleNote}>Next note →</button>}</> : <button className="secondary-button" onClick={nextRandomNote}>{roundDone ? 'Next →' : 'Skip →'}</button>}</div>}
       {mode !== 'explore' && <p className="quiz-guidance">{mode === 'one-note' ? 'Find this note on every string. Green positions are already found.' : `Review by note and string: ${progress.missed} missed, ${progress.due} due. Misses and overdue positions return more often; skipping has no penalty.`} Local record for {targetNote}{mode === 'random' ? ` on string ${randomTarget.string}` : ''}: {currentAttempts.filter(attempt => attempt.correct).length} correct, {currentAttempts.filter(attempt => !attempt.correct).length} missed.</p>}
+      {mode !== 'explore' && !narrow && <div className="fretboard-modes layout-toggle" role="group" aria-label="Practice layout"><button className={practiceLayout === 'vertical' ? 'active' : ''} aria-pressed={practiceLayout === 'vertical'} onClick={() => changePracticeLayout('vertical')}>直式 Vertical</button><button className={practiceLayout === 'horizontal' ? 'active' : ''} aria-pressed={practiceLayout === 'horizontal'} onClick={() => changePracticeLayout('horizontal')}>橫式 Horizontal</button></div>}
       {quizError && <div className="notice" role="alert">{quizError}</div>}
       <div className="fretboard-scroll" role="region" aria-label={vertical ? 'Fretboard frets 1 to 12' : 'Scroll horizontally through frets 1 to 12'} tabIndex={0}>
         {vertical ? <svg className="fretboard vertical" width="300" height={MOBILE_FRETBOARD_HEIGHT} viewBox={`0 0 300 ${MOBILE_FRETBOARD_HEIGHT}`} preserveAspectRatio="none" role="group" aria-label="Vertical six-string guitar fretboard, frets 1 to 12">

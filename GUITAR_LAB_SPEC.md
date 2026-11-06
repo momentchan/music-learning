@@ -378,7 +378,8 @@ A single miss is never presented as a lasting weakness.
   - The wood and fret wires are bounded by strings 1 and 6.
 - **Layouts:**
   - Vertical on phones: frets 0–12 all visible above the bottom nav with no horizontal scrolling.
-  - Horizontal on tablet and desktop.
+  - **Practice and recall modes MUST use the vertical layout on every screen size by default**, so the neck reads top-to-bottom like a chord chart. On wide screens a 直式/橫式 (vertical/horizontal) switch MAY change this, and the choice is remembered.
+  - Explore mode MAY use the horizontal layout on tablet and desktop.
   - A left-handed mirror option.
 - **Hit regions:** each (string, fret) cell is the hit target, about 44 × 44 CSS px where feasible. The mobile cell height MUST stay ≥ 40 px.
 - **Focus mode:** on narrow screens, the learner MAY pick a **focus string set** (e.g. strings 6–4) or a **position window** (e.g. frets 5–8). This enlarges cells.

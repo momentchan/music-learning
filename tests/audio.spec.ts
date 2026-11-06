@@ -112,3 +112,18 @@ test('random review requires the prompted string and records position-specific r
   expect(records).toHaveLength(2)
   expect(records.map(record => [record.targetString, record.targetFret, record.assisted])).toEqual(expect.arrayContaining([[targetString, position.fret, false], [targetString, position.fret, true]]))
 })
+
+test('practice modes use a vertical fretboard on desktop with a layout toggle', async ({ page }) => {
+  await page.goto('/')
+  await expect(page.getByRole('group', { name: 'Six-string guitar fretboard, frets 1 to 12' })).toBeVisible()
+  await page.getByRole('group', { name: 'Fretboard mode' }).getByRole('button', { name: 'Random review' }).click()
+  await expect(page.getByRole('group', { name: 'Vertical six-string guitar fretboard, frets 1 to 12' })).toBeVisible()
+  await page.getByRole('group', { name: 'Practice layout' }).getByRole('button', { name: /Horizontal/ }).click()
+  await expect(page.getByRole('group', { name: 'Six-string guitar fretboard, frets 1 to 12' })).toBeVisible()
+  await page.reload()
+  await page.getByRole('group', { name: 'Fretboard mode' }).getByRole('button', { name: 'One note' }).click()
+  await expect(page.getByRole('group', { name: 'Six-string guitar fretboard, frets 1 to 12' })).toBeVisible()
+  await page.getByRole('group', { name: 'Practice layout' }).getByRole('button', { name: /Vertical/ }).click()
+  await expect(page.getByRole('group', { name: 'Vertical six-string guitar fretboard, frets 1 to 12' })).toBeVisible()
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
+})
