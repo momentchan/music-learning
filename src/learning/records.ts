@@ -50,7 +50,7 @@ export interface ItemOutcome { index: number; attemptId?: string; result?: Resul
 
 export interface PracticeSession {
   id: string
-  mode: 'guided' | 'lesson' | 'free' | 'legacy'
+  mode: 'guided' | 'lesson' | 'free' | 'legacy' | 'lab'
   settings: { minutes?: number; nodeId?: string; templateIds?: string[]; difficulty?: number; audio?: boolean }
   plannedItems: PlannedItem[]
   /** Index of the next unanswered item. */

@@ -293,7 +293,7 @@ function EarTraining({ run, stop }: { run: (fn: () => Promise<unknown>) => Promi
       const record = await saveAttempt({ id: crypto.randomUUID(), sessionId: question.id, exerciseType: question.type, topicId: `ear.${question.type}`,
         question, response: choice, expected: question.answer, correct: choice === question.answer,
         responseMs: started ? Math.max(0, Math.round(performance.now() - started)) : 0, replays, difficulty: 1, timestamp: Date.now() })
-      setMastery(record.masteryAfter)
+      setMastery(record.masteryAfter ?? null)
     } catch { setSaveError('Answer checked, but could not be saved. Check browser storage and try again.') }
   }
   return <><section className="intro-card"><div><p className="eyebrow">05 / EAR TRAINING</p><h2>Listen before you look.</h2><p>Audio questions hide the answer until you submit. Replaying never counts against you.</p></div><div className="pulse-icon">◉</div></section>
