@@ -334,7 +334,7 @@ This generalizes the existing logic in `src/music/fretboardQuiz.ts` to all items
 | 5 | 30 days (cap) |
 
 Rules:
-- **Correct, unassisted:** box +1, capped at 5. A late review that is answered correctly advances only one box.
+- **Correct, unassisted:** box +1, capped at 5. A late review that is answered correctly advances only one box. Answering an item in box ≥ 1 again *before* it is due keeps its box and due date, so cramming in one sitting cannot skip intervals.
 - **Correct, assisted (hint shown or retry after a miss):** stays in box 0. Recheck within the session; recovery is recorded.
 - **Incorrect:** the item drops to box 0, gets a recheck within the session, and is then due tomorrow if it is not recovered. Priority goes up. The miss stays in history; later success never erases it.
 - **Due items stay due** until a graded response. Skip, explore and abort never change a schedule.

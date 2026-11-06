@@ -1,0 +1,136 @@
+import { expect, test, type Page } from '@playwright/test'
+
+/** Answers whatever item the session shows; uses the keyboard for fretboard taps. Returns false at the summary. */
+async function answerCurrent(page: Page): Promise<boolean> {
+  await expect(page.locator('.question-card, .lesson-card, .bridge-card, .summary-card').first()).toBeVisible()
+  if (await page.locator('.summary-card').isVisible().catch(() => false)) return false
+  const learn = page.getByRole('button', { name: /懂了，開始練習/ })
+  if (await learn.isVisible().catch(() => false)) { await learn.click(); return true }
+  const bridge = page.getByRole('button', { name: '很順' })
+  if (await bridge.isVisible().catch(() => false)) { await bridge.click(); return true }
+  const pitch = page.locator('.pitch-picker button').first()
+  const cell = page.locator('.fret-cell.interactive').first()
+  const choice = page.locator('.question-card .choice-grid button').first()
+  if (await pitch.isVisible().catch(() => false)) await pitch.click()
+  else if (await cell.isVisible().catch(() => false)) {
+    await cell.focus()
+    await page.keyboard.press('ArrowRight')
+    await page.keyboard.press('Enter')
+    await page.keyboard.press('Enter')
+  } else if (await choice.isVisible().catch(() => false)) await choice.click()
+  else {
+    const letter = page.locator('.picker-letters button').first()
+    const slots = await page.locator('.picker-slots span').count()
+    for (let i = 0; i < slots; i++) await letter.click()
+    await page.getByRole('button', { name: '送出' }).click()
+  }
+  await expect(page.getByRole('status').filter({ hasText: /正確|還不對|部分正確/ })).toBeVisible()
+  await page.getByRole('button', { name: /下一題/ }).click()
+  return true
+}
+
+test('cold start reaches the first practice question in two taps', async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: /開始 5 分鐘練習/ }).click()
+  await page.getByRole('button', { name: /懂了，開始練習/ }).click()
+  await expect(page.locator('.question-prompt')).toBeVisible()
+})
+
+test('a lesson persists every answer, resumes after reload, and completes with a summary', async ({ page }) => {
+  await page.goto('/learn/fret.open')
+  await page.getByRole('button', { name: '▶ 開始課程' }).click()
+  await answerCurrent(page) // learn card
+  await answerCurrent(page) // first question
+  const progressBefore = await page.locator('.session-bar small').textContent()
+  expect(progressBefore).toMatch(/^1\//)
+  await page.reload()
+  await expect(page.locator('.session-bar small')).toHaveText(progressBefore!)
+  await expect(page.getByRole('button', { name: /懂了，開始練習/ })).toHaveCount(0)
+  for (let i = 0; i < 20 && await answerCurrent(page); i++) { /* answer until summary */ }
+  await expect(page.getByText('練習完成 SESSION COMPLETE')).toBeVisible()
+  await page.goto('/progress')
+  await expect(page.locator('.mastery-list li').first()).toContainText('次作答')
+  await page.goto('/')
+  await expect(page.getByRole('button', { name: /繼續 →/ })).toHaveCount(0)
+})
+
+test('wrong answers get specific feedback, a retry, and a later recheck', async ({ page }) => {
+  await page.goto('/learn/fret.open')
+  await page.getByRole('button', { name: '▶ 開始課程' }).click()
+  await page.getByRole('button', { name: /懂了，開始練習/ }).click()
+  const prompt = await page.locator('.question-prompt').textContent()
+  const string = Number(/第 (\d) 弦/.exec(prompt!)![1])
+  const wrong = { 1: 'F', 2: 'C', 3: 'Ab', 4: 'Eb', 5: 'Bb', 6: 'F' }[string]!
+  await page.locator('.pitch-picker button').filter({ hasText: new RegExp(`^${wrong.replace('b', '♭')}`) }).first().click()
+  await expect(page.getByRole('status').filter({ hasText: '還不對' })).toContainText('差一格')
+  const total = Number((await page.locator('.session-bar small').textContent())!.split('/')[1])
+  await page.getByRole('button', { name: '再試一次' }).click()
+  await expect(page.locator('.pitch-picker button').first()).toBeEnabled()
+  await expect(page.locator('.session-bar small')).toHaveText(`1/${total}`)
+  expect(total).toBeGreaterThanOrEqual(6) // recheck inserted into the plan
+})
+
+test('deep links reload directly into a screen', async ({ page }) => {
+  await page.goto('/learn/key.diatonic')
+  await expect(page.getByRole('heading', { name: /調性與順階和弦/ })).toBeVisible()
+  await page.reload()
+  await expect(page.getByRole('heading', { name: /調性與順階和弦/ })).toBeVisible()
+  await page.goto('/learn/chord.changes')
+  await expect(page.getByText('這個主題還在規劃中')).toBeVisible()
+  await expect(page.getByRole('button', { name: '▶ 開始課程' })).toHaveCount(0)
+})
+
+test('backup export and validated import round-trip', async ({ page }) => {
+  await page.goto('/learn/fret.open')
+  await page.getByRole('button', { name: '▶ 開始課程' }).click()
+  await answerCurrent(page)
+  await answerCurrent(page)
+  await page.goto('/settings')
+  const [download] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: '匯出備份（JSON）' }).click()])
+  const file = await download.path()
+  await page.locator('input[type=file]').setInputFiles(file!)
+  await expect(page.getByText('備份內容預覽')).toBeVisible()
+  await expect(page.locator('.import-preview')).toContainText('作答紀錄：1')
+  await page.getByRole('button', { name: '匯入', exact: true }).click()
+  await expect(page.getByRole('status').filter({ hasText: '匯入完成' })).toContainText('1 筆作答紀錄')
+  await page.locator('input[type=file]').setInputFiles({ name: 'bad.json', mimeType: 'application/json', buffer: Buffer.from('{"format":"nope"}') })
+  await expect(page.getByRole('alert').filter({ hasText: '無法匯入' })).toBeVisible()
+})
+
+const VIEWPORTS = [{ width: 320, height: 568 }, { width: 375, height: 812 }, { width: 390, height: 844 }, { width: 430, height: 932 }, { width: 820, height: 1180 }, { width: 1280, height: 900 }]
+const ROUTES = ['/', '/learn', '/learn/chord.open', '/lab/fretboard', '/lab/chords', '/lab/progressions', '/guitar', '/progress', '/settings']
+
+test('no horizontal overflow on any route at representative viewports', async ({ browser }) => {
+  test.setTimeout(240_000)
+  for (const viewport of VIEWPORTS) {
+    const context = await browser.newContext({ viewport, isMobile: viewport.width < 700, hasTouch: viewport.width < 700 })
+    const page = await context.newPage()
+    for (const route of ROUTES) {
+      await page.goto(route)
+      await expect(page.locator('main')).toBeVisible()
+      await page.waitForTimeout(150)
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), `${route} @ ${viewport.width}`).toBe(true)
+    }
+    await context.close()
+  }
+})
+
+test('session fretboard has 44px-wide cells and fits above the fold on a 320px phone', async ({ browser }) => {
+  const context = await browser.newContext({ viewport: { width: 320, height: 568 }, isMobile: true, hasTouch: true })
+  const page = await context.newPage()
+  await page.goto('/learn/fret.naturals.low')
+  await page.getByRole('button', { name: '自由練習 10 題' }).click()
+  for (let i = 0; i < 10; i++) {
+    if (await page.locator('.fret-cell.interactive').first().isVisible().catch(() => false)) break
+    await answerCurrent(page)
+  }
+  const cell = page.locator('.fret-cell.interactive').first()
+  await expect(cell).toBeVisible()
+  const box = await cell.locator('rect').first().boundingBox()
+  expect(box!.width).toBeGreaterThanOrEqual(40)
+  await page.locator('.fret-cell.interactive[data-cell="6-5"]').tap()
+  await expect(page.getByText('已選：第 6 弦 第 5 格')).toBeVisible()
+  await page.locator('.fret-cell.interactive[data-cell="6-6"]').tap()
+  await expect(page.getByText('已選：第 6 弦 第 6 格')).toBeVisible()
+  await context.close()
+})

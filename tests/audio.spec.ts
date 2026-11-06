@@ -2,46 +2,43 @@ import { test, expect } from '@playwright/test'
 import { positionsForNote } from '../src/music/fretboardQuiz'
 
 test('fretboard note selection and silent mode', async ({ page }) => {
-  await page.goto('/')
-  await expect(page.getByRole('heading', { name: 'Fretboard', exact: true })).toBeVisible()
+  await page.goto('/lab/fretboard')
+  await expect(page.getByRole('heading', { name: 'Hear every position.' })).toBeVisible()
   await page.locator('svg.fretboard g[aria-label="String 1, fret 1, F4"]').click()
   await expect(page.getByText('String 1 · fret 1', { exact: false })).toBeVisible()
   await page.getByRole('button', { name: 'Turn silent mode on' }).click()
   await expect(page.getByRole('button', { name: 'Turn sound on' })).toBeVisible()
   await page.reload()
   await expect(page.getByRole('button', { name: 'Turn sound on' })).toBeVisible()
-  await page.getByRole('button', { name: 'Ear training', exact: true }).click()
+  await page.getByRole('tab', { name: '聽力' }).click()
   await expect(page.locator('.choice-grid button').first()).toBeDisabled()
 })
 
 test('progression and A/B controls can start and stop', async ({ page }) => {
-  await page.goto('/')
-  await page.getByRole('button', { name: 'Progressions', exact: true }).click()
+  await page.goto('/lab/progressions')
   await page.getByRole('button', { name: 'Play progression' }).click()
   await expect(page.getByRole('button', { name: 'Restart' })).toBeVisible()
   await page.getByRole('button', { name: /Stop/ }).click()
-  await page.getByRole('button', { name: 'Compare', exact: true }).click()
+  await page.getByRole('tab', { name: 'A/B 比較' }).click()
   await page.getByRole('button', { name: 'Play A', exact: true }).click()
   await page.getByRole('button', { name: 'Play B', exact: true }).click()
   await expect(page.getByText('WHAT CHANGED')).toBeVisible()
 })
 
 test('ear question validates and persists after reload', async ({ page }) => {
-  await page.goto('/')
-  await page.getByRole('button', { name: 'Ear training', exact: true }).click()
+  await page.goto('/lab/ear')
   await page.getByRole('button', { name: 'Play question' }).click()
   const choices = page.locator('.choice-grid button')
   await choices.first().click()
   await expect(page.getByRole('button', { name: 'Next question' })).toBeVisible()
   await page.reload()
-  await page.getByRole('button', { name: 'Ear training', exact: true }).click()
   await expect(page.locator('.history > div')).toHaveCount(1)
 })
 
 test('phone fits a vertical 1–12 fretboard without sideways scrolling', async ({ browser }) => {
   const context = await browser.newContext({ viewport: { width: 320, height: 568 }, isMobile: true, hasTouch: true })
   const page = await context.newPage()
-  await page.goto('/')
+  await page.goto('/lab/fretboard')
   await expect(page.locator('svg.fretboard > .svg-fret-label')).toHaveCount(12)
   await expect(page.getByRole('group', { name: 'Vertical six-string guitar fretboard, frets 1 to 12' })).toBeVisible()
   await expect(page.getByRole('group', { name: 'Fret range' })).toHaveCount(0)
@@ -71,7 +68,7 @@ test('phone fits a vertical 1–12 fretboard without sideways scrolling', async 
 })
 
 test('one-note practice checks positions and keeps a local record', async ({ page }) => {
-  await page.goto('/')
+  await page.goto('/lab/fretboard')
   await page.getByRole('group', { name: 'Fretboard mode' }).getByRole('button', { name: 'One note' }).click()
   await expect(page.getByText('0 / 6 found')).toBeVisible()
   await page.locator('svg.fretboard g[aria-label="String 1, fret 1"]').click()
@@ -90,7 +87,7 @@ test('one-note practice checks positions and keeps a local record', async ({ pag
 })
 
 test('random review requires the prompted string and records position-specific recall', async ({ page }) => {
-  await page.goto('/')
+  await page.goto('/lab/fretboard')
   await page.getByRole('group', { name: 'Fretboard mode' }).getByRole('button', { name: 'Random review' }).click()
   const target = await page.locator('.fretboard-quiz strong').evaluate(element => element.firstChild?.textContent || '')
   const targetString = Number((await page.locator('.fretboard-quiz strong em').textContent())!.replace('string ', ''))
@@ -114,7 +111,7 @@ test('random review requires the prompted string and records position-specific r
 })
 
 test('practice modes use a vertical fretboard on desktop with a layout toggle', async ({ page }) => {
-  await page.goto('/')
+  await page.goto('/lab/fretboard')
   await expect(page.getByRole('group', { name: 'Six-string guitar fretboard, frets 1 to 12' })).toBeVisible()
   await page.getByRole('group', { name: 'Fretboard mode' }).getByRole('button', { name: 'Random review' }).click()
   await expect(page.getByRole('group', { name: 'Vertical six-string guitar fretboard, frets 1 to 12' })).toBeVisible()

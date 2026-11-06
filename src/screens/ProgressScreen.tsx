@@ -1,0 +1,71 @@
+import { useEffect, useMemo, useState } from 'react'
+import { navigate } from '../app/router'
+import { NODES, PATHWAYS, nodeById } from '../curriculum/nodes'
+import { repository } from '../database/repository'
+import { itemLabel } from '../learning/labels'
+import { NODE_STATE_LABEL, pathwayCompletion, weakItems } from '../learning/mastery'
+import type { PracticeSession } from '../learning/records'
+import { boxLabel, isMissed } from '../learning/scheduler'
+import { PC_SHARP, displayNote } from '../music-theory/notes'
+import { useLearning } from '../stores/learning'
+
+export function ProgressScreen() {
+  const learning = useLearning()
+  const [sessions, setSessions] = useState<PracticeSession[]>([])
+  useEffect(() => { repository.listSessions(12).then(setSessions).catch(() => setSessions([])) }, [learning.attempts.length])
+  const weak = useMemo(() => weakItems(learning.reviews.values(), 12), [learning.reviews])
+  const nodes = NODES.filter(n => n.availability === 'available')
+
+  return <div className="progress">
+    <section className="card">
+      <h3>主題熟練度</h3>
+      <p className="helper">熟悉 = 至少 8 次作答、兩天以上、正確率 ≥ 80%，且一半以上的項目進入 3 天以上複習間隔。流暢 = 再加上應用題 ≥ 75% 與 80% 項目進入 7 天以上間隔。</p>
+      <ul className="mastery-list">{nodes.map(n => {
+        const m = learning.mastery.get(n.id)
+        return <li key={n.id}><button className="node-row" onClick={() => navigate(`/learn/${n.id}`)}>
+          <span className="node-text"><strong>{n.title}</strong><small>{m && m.samples ? `${m.samples} 次作答 · 近期 ${m.recentCorrect}/${m.recentTotal} · ${m.itemsSeen}/${m.itemsTotal} 項目` : '尚未練習'}</small></span>
+          <span className={`badge state-${m?.state ?? 'new'}`}>{NODE_STATE_LABEL[m?.state ?? 'new']}{m?.played ? ` · 🎸${m.played === 'verified' ? '已驗證' : '自評'}` : ''}</span>
+        </button></li>
+      })}</ul>
+    </section>
+
+    <section className="card">
+      <h3>指板地圖：每條弦上的每個音</h3>
+      <p className="helper">數字是目前的複習間隔（天）；✕ = 上次答錯；空白 = 還沒練過。共 72 個「音 × 弦」組合。</p>
+      <div className="heatmap-wrap">
+        <table className="heatmap">
+          <caption className="sr-only">各弦各音的複習狀態</caption>
+          <thead><tr><th scope="col">弦</th>{PC_SHARP.map(n => <th key={n} scope="col">{displayNote(n)}</th>)}</tr></thead>
+          <tbody>{[1, 2, 3, 4, 5, 6].map(s => <tr key={s}><th scope="row">{s}</th>{PC_SHARP.map(n => {
+            const r = learning.reviews.get(`fret.note.${n}.s${s}`)
+            const text = !r ? '' : isMissed(r) ? '✕' : r.box === 0 ? '·' : ['', '1', '3', '7', '14', '30'][r.box]
+            return <td key={n} className={!r ? 'unseen' : isMissed(r) ? 'missed' : `box-${r.box}`} aria-label={`第 ${s} 弦 ${displayNote(n)}：${!r ? '未練習' : isMissed(r) ? '上次答錯' : boxLabel(r.box)}`}>{text}</td>
+          })}</tr>)}</tbody>
+        </table>
+      </div>
+    </section>
+
+    <section className="card">
+      <h3>需要加強的項目</h3>
+      {weak.length ? <ul className="weak-list">{weak.map(w => <li key={w.itemId}><strong>{itemLabel(w.itemId)}</strong><span>{w.reason}</span></li>)}</ul>
+        : <p className="helper">目前沒有反覆答錯的項目（至少 3 次作答才會判斷，一次答錯不算弱點）。</p>}
+    </section>
+
+    <section className="card">
+      <h3>學習路徑</h3>
+      <ul className="pathway-progress">{PATHWAYS.map(p => {
+        const c = pathwayCompletion(p.id, learning.mastery)
+        return <li key={p.id}><span>{p.title}</span><div className="bar" role="progressbar" aria-valuemin={0} aria-valuemax={c.total} aria-valuenow={c.done} aria-label={p.title}><span style={{ width: `${c.done / c.total * 100}%` }}/></div><small>{c.done}/{c.total}</small></li>
+      })}</ul>
+    </section>
+
+    <section className="card">
+      <h3>最近的練習</h3>
+      {sessions.length ? <ul className="history">{sessions.map(s => <li key={s.id}>
+        <span>{new Date(s.startedAt).toLocaleDateString('zh-TW', { month: 'numeric', day: 'numeric' })}</span>
+        <strong>{s.mode === 'lesson' ? `課程：${nodeById(s.settings.nodeId ?? '')?.title ?? ''}` : s.mode === 'guided' ? `${s.settings.minutes} 分鐘練習` : s.mode === 'free' ? '自由練習' : s.mode === 'lab' ? '工具頁練習' : '舊版紀錄'}</strong>
+        <small>{s.summary ? `${s.summary.correct}/${s.summary.graded} 正確` : s.status === 'active' ? '進行中' : s.status === 'abandoned' ? '未完成' : ''}</small>
+      </li>)}</ul> : <p className="helper">完成的練習會出現在這裡。</p>}
+    </section>
+  </div>
+}

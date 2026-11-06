@@ -11,7 +11,7 @@ export default defineConfig({
       includeAssets: ['favicon.svg'],
       manifest: {
         name: 'Guitar Lab', short_name: 'Guitar Lab',
-        description: 'Hear and practice guitar music theory offline',
+        description: '在手機上學吉他樂理，再拿起吉他彈出來。可離線使用。', lang: 'zh-Hant',
         theme_color: '#12151e', background_color: '#12151e', display: 'standalone',
         icons: [
           { src: '/icon-192.png', sizes: '192x192', type: 'image/png' },
@@ -19,7 +19,7 @@ export default defineConfig({
           { src: '/favicon.svg', sizes: 'any', type: 'image/svg+xml', purpose: 'any' },
         ],
       },
-      workbox: { globPatterns: ['**/*.{js,css,html,svg,woff2}'] },
+      workbox: { globPatterns: ['**/*.{js,css,html,svg,png,ico,woff2,webmanifest}'], navigateFallback: '/index.html' },
     }),
   ],
   test: { environment: 'node', include: ['src/**/*.test.ts'] },

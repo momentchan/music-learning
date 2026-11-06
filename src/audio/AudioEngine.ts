@@ -109,6 +109,27 @@ export class AudioEngine {
     transport.scheduleOnce(time => Tone.getDraw().schedule(() => { if (token === this.playbackToken) { this.stop(); onStop?.() } }, time), at + 0.04)
     transport.start('+0.06')
   }
+  /**
+   * Schedules `count` metronome clicks. Returns the estimated performance.now() time of the first click,
+   * or null when audio is unavailable (callers then fall back to a visual-only pulse).
+   * Device output latency varies, so rhythm grading must also apply the learner's calibration offset.
+   */
+  async playClicks(count: number, bpm: number, accentEvery = 4): Promise<number | null> {
+    if (!await this.activate()) return null
+    this.stop()
+    const transport = Tone.getTransport()
+    const token = ++this.playbackToken
+    const beat = 60 / bpm
+    for (let i = 0; i < count; i++) {
+      transport.schedule(time => { if (this.audible()) this.click!.triggerAttackRelease(i % accentEvery === 0 ? 1200 : 820, 0.03, time, 0.35) }, i * beat)
+    }
+    transport.scheduleOnce(time => Tone.getDraw().schedule(() => { if (token === this.playbackToken) this.stop() }, time), count * beat + 0.1)
+    const lead = 0.12
+    transport.start(`+${lead}`)
+    const raw = Tone.getContext().rawContext as AudioContext
+    const outputLatency = (raw.outputLatency || 0) + (raw.baseLatency || 0)
+    return performance.now() + (lead + outputLatency) * 1000
+  }
   stop() {
     this.playbackToken++
     const transport = Tone.getTransport()

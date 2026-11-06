@@ -282,16 +282,16 @@ const index = new Map(NODES.map(n => [n.id, n]))
 export const nodeById = (id: string): SkillNode | undefined => index.get(id)
 export const availableNodes = () => NODES.filter(n => n.availability === 'available')
 
-export interface Pathway { id: string; title: string; description: string; steps: string[] }
+export interface Pathway { id: string; short: string; title: string; description: string; steps: string[] }
 export const PATHWAYS: readonly Pathway[] = [
-  { id: 'start', title: '★ 從這裡開始 Start Here', description: '建議初學者的順序：先能彈，再理解，最後連起來。',
+  { id: 'start', short: '★ 從這裡開始', title: '★ 從這裡開始 Start Here', description: '建議初學者的順序：先能彈，再理解，最後連起來。',
     steps: ['fret.open', 'chord.diagram', 'chord.open', 'rhythm.pulse', 'rhythm.strum', 'fret.naturals.low', 'chord.changes', 'interval.basics', 'triad.basic', 'key.diatonic', 'harmony.basic'] },
-  { id: 'fretboard', title: 'A — 指板精通 Fretboard Mastery', description: '把音名、八度、音程和和弦形狀連成一張地圖。',
+  { id: 'fretboard', short: 'A 指板', title: 'A — 指板精通 Fretboard Mastery', description: '把音名、八度、音程和和弦形狀連成一張地圖。',
     steps: ['fret.naturals.low', 'fret.naturals.all', 'fret.octaves', 'interval.shapes', 'triad.stringsets', 'fret.caged', 'scale.positions'] },
-  { id: 'harmony', title: 'B — 理解和聲 Harmony Understanding', description: '從調性到功能和聲、次屬、借用與聲部進行。',
+  { id: 'harmony', short: 'B 和聲', title: 'B — 理解和聲 Harmony Understanding', description: '從調性到功能和聲、次屬、借用與聲部進行。',
     steps: ['key.diatonic', 'harmony.basic', 'harmony.cadences', 'harmony.secondary-dom', 'harmony.borrowed', 'voice.common-tones'] },
-  { id: 'improv', title: 'C — 即興基礎 Improvisation', description: '從音程、五聲音階到目標音與樂句。',
+  { id: 'improv', short: 'C 即興', title: 'C — 即興基礎 Improvisation', description: '從音程、五聲音階到目標音與樂句。',
     steps: ['interval.basics', 'scale.penta1', 'scale.positions', 'improv.targets', 'voice.guide-tones', 'improv.approach', 'improv.phrase'] },
-  { id: 'compose', title: 'D — 作曲與分析 Composition & Analysis', description: '羅馬數字、進行、終止、代理與重配和聲。',
+  { id: 'compose', short: 'D 作曲', title: 'D — 作曲與分析 Composition & Analysis', description: '羅馬數字、進行、終止、代理與重配和聲。',
     steps: ['key.diatonic', 'harmony.basic', 'harmony.cadences', 'voice.common-tones', 'harmony.tritone-sub', 'compose.reharm'] },
 ]

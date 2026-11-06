@@ -1,6 +1,5 @@
 node_modules/
 dist/
-packages/three-core/
 test-results/
 playwright-report/
 *.local
