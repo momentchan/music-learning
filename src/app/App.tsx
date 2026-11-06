@@ -98,7 +98,8 @@ function Fretboard({ run }: { run: (fn: () => Promise<unknown>) => Promise<void>
   const [accessibleString, setAccessibleString] = useState(1)
   const [accessibleFret, setAccessibleFret] = useState(1)
   const frets = Array.from({ length: 12 }, (_, index) => index + 1)
-  const strings = [5, 4, 3, 2, 1, 0]
+  const strings = [5, 4, 3, 2, 1, 0] // horizontal: high e on top, like tab
+  const verticalStrings = [0, 1, 2, 3, 4, 5] // vertical: low E on the left, like a chord diagram
   const targetNote = mode === 'one-note' ? singleNote : randomTarget.note
   const targetCount = positionsForNote(targetNote).length
   const currentAttempts = quizAttempts.filter(attempt => attempt.topicId === `fretboard.note.${targetNote}` && (mode === 'one-note' || (attempt.targetString ?? attempt.string) === randomTarget.string))
@@ -190,7 +191,7 @@ function Fretboard({ run }: { run: (fn: () => Promise<unknown>) => Promise<void>
           {[111, 199].map(x => <circle key={x} cx={x} cy={MOBILE_FRET_CENTERS[12]} r="8" fill="#d8c7a9" opacity="0.7"/>)}
           <rect x="45" y={MOBILE_FRET_WIRES[0] - 4} width="220" height="8" rx="2" fill="#ead9be"/>
           {MOBILE_FRET_WIRES.slice(1).map((y, fret) => <g key={fret}><line x1="45" y1={y + 1} x2="265" y2={y + 1} stroke="#1b1b1b" strokeWidth="4" opacity="0.4"/><line x1="45" y1={y} x2="265" y2={y} stroke="#c8c8c0" strokeWidth="3"/></g>)}
-          {strings.map((string, col) => <g key={string}><line x1={45 + col * 44} y1="32" x2={45 + col * 44} y2={MOBILE_FRET_WIRES[12] + 20} stroke="#c5bdb1" strokeWidth={1.2 + col * 0.45}/><text x={45 + col * 44} y="21" textAnchor="middle" className="svg-string-label">{['E', 'A', 'D', 'G', 'B', 'e'][string]}</text>
+          {verticalStrings.map((string, col) => <g key={string}><line x1={45 + col * 44} y1="32" x2={45 + col * 44} y2={MOBILE_FRET_WIRES[12] + 20} stroke="#c5bdb1" strokeWidth={1.2 + col * 0.45}/><text x={45 + col * 44} y="21" textAnchor="middle" className="svg-string-label">{['E', 'A', 'D', 'G', 'B', 'e'][string]}</text>
             {frets.map(fret => noteTarget(string, fret, 45 + col * 44, MOBILE_FRET_CENTERS[fret], { x: 24 + col * 44, y: MOBILE_FRET_WIRES[fret - 1], width: 42, height: MOBILE_FRET_WIRES[fret] - MOBILE_FRET_WIRES[fret - 1] }))}</g>)}
           {frets.map(fret => <text key={fret} x="14" y={MOBILE_FRET_CENTERS[fret] + 4} textAnchor="middle" className="svg-fret-label">{fret}</text>)}
         </svg> : <svg className="fretboard" width={FRETBOARD_WIDTH} height="330" viewBox={`0 0 ${FRETBOARD_WIDTH} 330`} role="group" aria-label="Six-string guitar fretboard, frets 1 to 12">
