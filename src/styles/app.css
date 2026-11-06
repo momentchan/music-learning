@@ -24,8 +24,6 @@
 @media(max-width:700px){
   .fretboard-page .lab-tabs{margin:6px 0 4px;gap:4px}
   .fretboard-page .lab-tabs button{min-height:34px;padding:4px 10px;font-size:12px}
-  .fretboard-page .fretboard-scroll .fretboard.vertical{height:min(586px,calc(100dvh - 222px))}
-  .fretboard-page .fretboard-card.practice .fretboard.vertical{height:min(586px,calc(100dvh - 297px))}
 }
 .continue-card{display:flex;justify-content:space-between;align-items:center;gap:12px;border-color:#6d8a5e;background:#1f2d27}
 .rec-list,.weak-list,.node-list,.mastery-list,.bridge-list,.history,.pathway-progress{list-style:none;margin:0;padding:0}
@@ -100,12 +98,19 @@
 .summary-errors ul{padding-left:18px;color:#f1c294;font-size:13px}
 
 /* Shared fretboard */
+.fretboard-scroll .fretboard.vertical{height:auto}
 .shared-fretboard{width:100%;max-width:420px;margin:0 auto;touch-action:manipulation}
 .shared-fretboard.is-horizontal{max-width:760px}
 .shared-fretboard .fretboard{margin:0 auto;max-width:none;min-width:0;background:none;border-radius:0}
 .fret-cell.interactive{cursor:pointer}
 .fret-cell:focus{outline:none}
 .fret-cell:focus-visible>rect:first-child{stroke:#efb66e;stroke-width:2.5}
+@media(max-width:700px){
+  .fretboard-scroll{overflow:visible;overscroll-behavior:auto;touch-action:pan-y pinch-zoom;user-select:none}
+  .fretboard-page .fretboard-scroll .fretboard.vertical,.fretboard-page .fretboard-card.practice .fretboard.vertical{height:auto}
+  .fretboard-controls{position:sticky;top:0;z-index:5;background:#1b222d;padding:4px 0;box-shadow:0 5px 8px #1b222d}
+  .question-prompt{position:sticky;top:0;z-index:5;background:#1b222d;padding:8px 0}
+}
 
 /* Pickers */
 .note-picker{display:grid;gap:10px}

@@ -12,7 +12,7 @@ export function LessonContentView({ node, layout = 'vertical' }: { node: SkillNo
     <section><h3>是什麼</h3><p>{c.definition}</p></section>
     <section><h3>為什麼重要</h3><p>{c.why}</p></section>
     {c.visual?.kind === 'fretboard' && <figure className="lesson-visual">
-      <Fretboard tuning={STANDARD.midi} orientation={layout} label={c.visual.caption} fitHeight={420} marks={c.visual.positions.map(([string, fret, label]) => ({ string, fret, label, tone: 'target' }))}/>
+      <Fretboard tuning={STANDARD.midi} orientation={layout} label={c.visual.caption} marks={c.visual.positions.map(([string, fret, label]) => ({ string, fret, label, tone: 'target' }))}/>
       <figcaption>{c.visual.caption}</figcaption>
     </figure>}
     {c.visual?.kind === 'shape' && <figure className="lesson-visual shapes">

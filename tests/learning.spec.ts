@@ -5,9 +5,19 @@ async function answerCurrent(page: Page): Promise<boolean> {
   await expect(page.locator('.question-card, .lesson-card, .bridge-card, .summary-card').first()).toBeVisible()
   if (await page.locator('.summary-card').isVisible().catch(() => false)) return false
   const learn = page.getByRole('button', { name: /懂了，開始練習/ })
-  if (await learn.isVisible().catch(() => false)) { await learn.click(); return true }
+  if (await learn.isVisible().catch(() => false)) {
+    const button = await learn.elementHandle()
+    await learn.click()
+    await page.waitForFunction(element => !element?.isConnected, button)
+    return true
+  }
   const bridge = page.getByRole('button', { name: '很順' })
-  if (await bridge.isVisible().catch(() => false)) { await bridge.click(); return true }
+  if (await bridge.isVisible().catch(() => false)) {
+    const button = await bridge.elementHandle()
+    await bridge.click()
+    await page.waitForFunction(element => !element?.isConnected, button)
+    return true
+  }
   const pitch = page.locator('.pitch-picker button').first()
   const cell = page.locator('.fret-cell.interactive').first()
   const choice = page.locator('.question-card .choice-grid button').first()
@@ -25,7 +35,9 @@ async function answerCurrent(page: Page): Promise<boolean> {
     await page.getByRole('button', { name: '送出' }).click()
   }
   await expect(page.getByRole('status').filter({ hasText: /正確|還不對|部分正確/ })).toBeVisible()
+  const currentQuestion = await page.locator('.question-prompt').elementHandle()
   await page.getByRole('button', { name: /下一題/ }).click()
+  await page.waitForFunction(element => !element?.isConnected, currentQuestion)
   return true
 }
 
@@ -115,7 +127,7 @@ test('no horizontal overflow on any route at representative viewports', async ({
   }
 })
 
-test('session fretboard has 44px-wide cells and fits above the fold on a 320px phone', async ({ browser }) => {
+test('session fretboard preserves proportions and hides open-string hints on a 320px phone', async ({ browser }) => {
   const context = await browser.newContext({ viewport: { width: 320, height: 568 }, isMobile: true, hasTouch: true })
   const page = await context.newPage()
   await page.goto('/learn/fret.naturals.low')
@@ -128,6 +140,12 @@ test('session fretboard has 44px-wide cells and fits above the fold on a 320px p
   await expect(cell).toBeVisible()
   const box = await cell.locator('rect').first().boundingBox()
   expect(box!.width).toBeGreaterThanOrEqual(40)
+  expect(await page.locator('.shared-fretboard .svg-string-label').allTextContents()).toEqual(['6', '5', '4', '3', '2', '1'])
+  const board = page.locator('.shared-fretboard svg')
+  const ratio = await board.evaluate(element => { const box = element.getBoundingClientRect(); return box.width / box.height })
+  await page.setViewportSize({ width: 320, height: 844 })
+  const tallerRatio = await board.evaluate(element => { const box = element.getBoundingClientRect(); return box.width / box.height })
+  expect(tallerRatio).toBeCloseTo(ratio, 3)
   await page.locator('.fret-cell.interactive[data-cell="6-5"]').tap()
   await expect(page.getByText('已選：第 6 弦 第 5 格')).toBeVisible()
   await page.locator('.fret-cell.interactive[data-cell="6-6"]').tap()

@@ -10,17 +10,6 @@ import { displayNote } from '../../music-theory/notes'
 import { audioIsOn, useAudioUi } from '../../stores/audioUi'
 import { useLearning } from '../../stores/learning'
 
-export function useViewportHeight() {
-  const [height, setHeight] = useState(() => typeof window === 'undefined' ? 800 : window.innerHeight)
-  useEffect(() => {
-    const update = () => setHeight(window.innerHeight)
-    window.addEventListener('resize', update)
-    window.addEventListener('orientationchange', update)
-    return () => { window.removeEventListener('resize', update); window.removeEventListener('orientationchange', update) }
-  }, [])
-  return height
-}
-
 interface Props {
   question: Question
   grade: Grade | null
@@ -32,7 +21,6 @@ interface Props {
 /** Renders one question and captures a real response. Validation happens in the runner against the stored question. */
 export function QuestionView({ question, grade, response, onSubmit, layout }: Props) {
   const answered = grade !== null
-  const vh = useViewportHeight()
   const play = useAudioUi(s => s.play)
   const leftHanded = useLearning(s => s.preferences.leftHanded)
   const [selected, setSelected] = useState<{ string: number; fret: number } | null>(null)
@@ -53,7 +41,7 @@ export function QuestionView({ question, grade, response, onSubmit, layout }: Pr
       <h2 className="question-prompt">{question.prompt}</h2>
       {audioButton}
       {shape && <div className="question-visual"><ChordDiagram shape={shape} size={170} showName={false}/></div>}
-      {display?.positions && <div className="question-visual board"><Fretboard leftHanded={leftHanded} tuning={[40, 45, 50, 55, 59, 64]} orientation={layout} label="題目位置" fitHeight={Math.max(260, Math.min(420, vh - 430))}
+      {display?.positions && <div className="question-visual board"><Fretboard leftHanded={leftHanded} tuning={[40, 45, 50, 55, 59, 64]} orientation={layout} label="題目位置"
         marks={display.positions.map(([string, fret, label]) => ({ string, fret, label, tone: label === 'R' ? 'root' : 'target' }))}/></div>}
       {display?.pattern && <PatternGrid pattern={display.pattern}/>}
       <div className="choice-grid" role="group" aria-label="選項">
@@ -70,7 +58,7 @@ export function QuestionView({ question, grade, response, onSubmit, layout }: Pr
     const marks: FretMark[] = [{ string: question.string, fret: question.fret, label: answered ? displayNote(['C', 'C#', 'D', 'Eb', 'E', 'F', 'F#', 'G', 'Ab', 'A', 'Bb', 'B'][question.answerPc]) : '?', tone: answered ? (grade!.result === 'correct' ? 'correct' : 'target') : 'target' }]
     return <div className="question">
       <h2 className="question-prompt">{question.prompt}</h2>
-      <div className="question-visual board"><Fretboard leftHanded={leftHanded} tuning={question.tuning} orientation={layout} marks={marks} label={`指板，題目位置：第 ${question.string} 弦 ${question.fret === 0 ? '空弦' : `第 ${question.fret} 格`}`} fitHeight={Math.max(280, Math.min(560, vh - 400))}/></div>
+      <div className="question-visual board"><Fretboard leftHanded={leftHanded} tuning={question.tuning} orientation={layout} marks={marks} label={`指板，題目位置：第 ${question.string} 弦 ${question.fret === 0 ? '空弦' : `第 ${question.fret} 格`}`}/></div>
       <PitchPicker disabled={answered} onPick={value => onSubmit({ kind: 'fret-identify', value })}/>
       {answered && response?.kind === 'fret-identify' && <p className="helper">你的答案：{displayNote(response.value)}</p>}
     </div>
@@ -91,7 +79,7 @@ export function QuestionView({ question, grade, response, onSubmit, layout }: Pr
     return <div className="question">
       <h2 className="question-prompt">{question.prompt}</h2>
       <div className="question-visual board"><Fretboard leftHanded={leftHanded} tuning={question.tuning} orientation={layout} minFret={0} maxFret={question.maxFret === 0 ? 5 : question.maxFret}
-        marks={marks} onSelect={select} disabled={answered} label="可點選的指板，選好後再點一次或按確定" fitHeight={Math.max(330, Math.min(620, vh - 300))}/></div>
+        marks={marks} onSelect={select} disabled={answered} label="可點選的指板，選好後再點一次或按確定"/></div>
       {!answered && <div className="locate-confirm">
         <span>{selected ? `已選：第 ${selected.string} 弦 ${selected.fret === 0 ? '空弦' : `第 ${selected.fret} 格`}` : '點一個位置（再點一次或按確定送出）'}</span>
         <button type="button" className="primary-button" disabled={!selected} onClick={() => selected && onSubmit({ kind: 'fret-locate', ...selected })}>確定</button>

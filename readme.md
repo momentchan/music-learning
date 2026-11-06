@@ -52,7 +52,7 @@ npm run build
   Every exercise has retry, why and next. A wrong answer also schedules an in-session recheck.
 - **Answer types:** fretboard tap, with keyboard arrows and Enter; spelled-note picker; pitch picker; multiple choice; strum/rhythm pad with latency calibration; audio questions (skipped without penalty when sound is off).
 - **Review:** one Leitner scheduler for every review item, with intervals of 1/3/7/14/30 days, a short recheck after misses or hints, and cramming protection. Mastery states run New → Learning → Familiar → Fluent, and Played status is tracked separately.
-- **Fretboard:** a shared SVG fretboard covering frets 0–12, vertical by default (low E on the left), with an optional horizontal layout and a left-handed mirror. A chord-diagram component is backed by a shape library that the tests check.
+- **Fretboard:** a shared SVG fretboard covering frets 0–12, vertical by default (thick string 6 on the left), with an optional horizontal layout and a left-handed mirror. String labels show numbers without open-string note hints. Mobile layouts retain their proportions and scroll with the whole page; swipes do not answer questions. A chord-diagram component is backed by a shape library that the tests check.
 - **Progress screen:** node states with evidence counts, a 72-cell string × note map, weak items (≥ 3 samples), pathway progress, and session history.
 - **Guitar screen:** a queue of bridge tasks completed by self-assessment. Self-reports mark a node as "played" but never raise recall mastery.
 - **Storage:**

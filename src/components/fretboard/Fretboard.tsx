@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react'
+import { useMemo, useRef, type KeyboardEvent } from 'react'
 import { PC_SHARP, displayNote } from '../../music-theory/notes'
 
 /** Shared SVG fretboard (spec §7.1). Renders and reports taps; it never computes music theory. */
@@ -14,14 +14,11 @@ export interface FretboardProps {
   showNoteNames?: boolean
   onSelect?: (string: number, fret: number) => void
   disabled?: boolean
-  /** Target pixel height for the vertical layout; geometry is recomputed so text never distorts. */
-  fitHeight?: number
   label: string
   leftHanded?: boolean
 }
 
 const STRINGS = [6, 5, 4, 3, 2, 1]
-const STRING_NAMES = ['', 'e', 'B', 'G', 'D', 'A', 'E']
 const noteAt = (tuning: readonly number[], string: number, fret: number) => tuning[6 - string] + fret
 const pcName = (midi: number) => displayNote(PC_SHARP[midi % 12])
 export const positionLabel = (string: number, fret: number) => `第 ${string} 弦 ${fret === 0 ? '空弦' : `第 ${fret} 格`}`
@@ -36,20 +33,7 @@ const TONE_STYLE: Record<MarkTone, { fill: string; stroke: string; text: string;
   neutral: { fill: '#2b333d', stroke: '#b6a994', text: '#e8e2d6', shape: 'circle' },
 }
 
-function useWidth<T extends HTMLElement>() {
-  const ref = useRef<T>(null)
-  const [width, setWidth] = useState(340)
-  useEffect(() => {
-    if (!ref.current) return
-    const observer = new ResizeObserver(entries => setWidth(Math.max(240, entries[0].contentRect.width)))
-    observer.observe(ref.current)
-    return () => observer.disconnect()
-  }, [])
-  return { ref, width }
-}
-
-export function Fretboard({ tuning, minFret = 0, maxFret = 12, orientation, marks = [], showNoteNames = false, onSelect, disabled, fitHeight, label, leftHanded }: FretboardProps) {
-  const { ref, width } = useWidth<HTMLDivElement>()
+export function Fretboard({ tuning, minFret = 0, maxFret = 12, orientation, marks = [], showNoteNames = false, onSelect, disabled, label, leftHanded }: FretboardProps) {
   const frets = useMemo(() => Array.from({ length: maxFret - minFret + 1 }, (_, i) => minFret + i), [minFret, maxFret])
   const hasOpen = minFret === 0
   const playable = frets.filter(f => f > 0)
@@ -64,12 +48,10 @@ export function Fretboard({ tuning, minFret = 0, maxFret = 12, orientation, mark
       const top = 26
       const openH = hasOpen ? 38 : 0
       const nutY = top + openH
-      const desired = fitHeight ? (fitHeight * VW) / width : 600
-      const available = Math.max(playable.length * 30, desired - nutY - 12)
-      const weights = playable.map((_, i) => Math.pow(2, -i / 12))
-      const scale = available / weights.reduce((a, b) => a + b, 0)
+      // Fixed geometry scales uniformly with width; short screens scroll the page.
+      const weights = playable.map((_, i) => Math.max(40, 54 * Math.pow(2, -i / 12)))
       const wires = [nutY]
-      weights.forEach(w => wires.push(wires[wires.length - 1] + w * scale))
+      weights.forEach(w => wires.push(wires[wires.length - 1] + w))
       const height = wires[wires.length - 1] + 12
       const x = (string: number) => {
         const col = leftHanded ? string - 1 : 6 - string
@@ -95,7 +77,7 @@ export function Fretboard({ tuning, minFret = 0, maxFret = 12, orientation, mark
       return { cx: (wires[i] + wires[i + 1]) / 2, cy, rect: { x: wires[i], y: cy - 20, width: wires[i + 1] - wires[i], height: 40 } }
     }
     return { kind: 'h' as const, w, h: 272, wires, y, cell, nutX: left }
-  }, [vertical, hasOpen, fitHeight, width, playable, minFret, leftHanded])
+  }, [vertical, hasOpen, playable, minFret, leftHanded])
 
   function focusCell(string: number, fret: number) {
     svgRef.current?.querySelector<SVGGElement>(`[data-cell="${string}-${fret}"]`)?.focus()
@@ -115,9 +97,9 @@ export function Fretboard({ tuning, minFret = 0, maxFret = 12, orientation, mark
   const inlays = [3, 5, 7, 9].filter(f => f >= Math.max(1, minFret) && f <= maxFret)
   const g = geometry
 
-  return <div ref={ref} className={`shared-fretboard ${vertical ? 'is-vertical' : 'is-horizontal'}`}>
+  return <div className={`shared-fretboard ${vertical ? 'is-vertical' : 'is-horizontal'}`}>
     <svg ref={svgRef} className={`fretboard ${vertical ? 'vertical' : ''}`} viewBox={`0 0 ${g.w} ${g.h}`} role="group" aria-label={label}
-      style={{ width: '100%', height: 'auto' }}>
+      preserveAspectRatio="xMidYMin meet" style={{ width: '100%', height: 'auto' }}>
       <defs><linearGradient id="fb-wood" x1="0" y1="0" x2={vertical ? 1 : 0} y2={vertical ? 0 : 1}><stop offset="0" stopColor="#5a4030"/><stop offset="0.5" stopColor="#3c2b25"/><stop offset="1" stopColor="#59402f"/></linearGradient></defs>
       {g.kind === 'v' ? <>
         <rect x={g.x(leftHanded ? 1 : 6)} y={g.nutY} width={CELL * 5} height={g.wires[g.wires.length - 1] - g.nutY} fill="url(#fb-wood)"/>
@@ -125,7 +107,7 @@ export function Fretboard({ tuning, minFret = 0, maxFret = 12, orientation, mark
         {maxFret >= 12 && minFret <= 12 && [[5, 4], [3, 2]].map(([a, b]) => <circle key={a} cx={(g.x(a) + g.x(b)) / 2} cy={g.cell(3, 12).cy} r="7" fill="#d8c7a9" opacity="0.65"/>)}
         {minFret <= 1 && <rect x={g.x(leftHanded ? 1 : 6) - 2} y={g.nutY - 4} width={CELL * 5 + 4} height="7" rx="2" fill="#ead9be"/>}
         {g.wires.slice(1).map((y, i) => <line key={i} x1={g.x(leftHanded ? 1 : 6)} x2={g.x(leftHanded ? 6 : 1)} y1={y} y2={y} stroke="#c8c8c0" strokeWidth="2.5"/>)}
-        {STRINGS.map(s => <g key={s}><line x1={g.x(s)} x2={g.x(s)} y1={g.top} y2={g.wires[g.wires.length - 1]} stroke="#c5bdb1" strokeWidth={1 + (s - 1) * 0.4}/><text x={g.x(s)} y="16" textAnchor="middle" className="svg-string-label">{STRING_NAMES[s]}</text></g>)}
+        {STRINGS.map(s => <g key={s}><line x1={g.x(s)} x2={g.x(s)} y1={g.top} y2={g.wires[g.wires.length - 1]} stroke="#c5bdb1" strokeWidth={1 + (s - 1) * 0.4}/><text x={g.x(s)} y="16" textAnchor="middle" className="svg-string-label" aria-label={`第 ${s} 弦`}>{s}</text></g>)}
         {frets.map(f => <text key={f} x="13" y={g.cell(6, f).cy + 4} textAnchor="middle" className="svg-fret-label">{f}</text>)}
       </> : <>
         <rect x={g.nutX} y={g.y(leftHanded ? 6 : 1)} width={g.wires[g.wires.length - 1] - g.nutX} height={40 * 5} fill="url(#fb-wood)"/>

@@ -377,10 +377,11 @@ A single miss is never presented as a lasting weakness.
   - Inlays: single dots at 3, 5, 7 and 9; a double dot at 12.
   - The wood and fret wires are bounded by strings 1 and 6.
 - **Layouts:**
-  - Vertical on phones: frets 0–12 all visible above the bottom nav with no horizontal scrolling.
+  - Vertical on phones: preserve the original cell proportions and use normal whole-page vertical scrolling to reach lower frets. Do not compress the neck to fit the screen or create a nested scroll area.
   - **Practice and recall modes MUST use the vertical layout on every screen size by default**, so the neck reads top-to-bottom like a chord chart. On wide screens a 直式/橫式 (vertical/horizontal) switch MAY change this, and the choice is remembered.
   - Explore mode MAY use the horizontal layout on tablet and desktop.
   - String order: in the vertical layout, low E is on the left (E A D G B e), matching chord diagrams (§7.2). In the horizontal layout, high e is on top, matching tablature.
+  - Label strings with their numbers only. Do not display E/B/G/D/A/E above the nut as an answer hint.
   - A left-handed mirror option.
 - **Hit regions:** each (string, fret) cell is the hit target, about 44 × 44 CSS px where feasible. The mobile cell height MUST stay ≥ 40 px.
 - **Focus mode:** on narrow screens, the learner MAY pick a **focus string set** (e.g. strings 6–4) or a **position window** (e.g. frets 5–8). This enlarges cells.
@@ -393,7 +394,7 @@ A single miss is never presented as a lasting weakness.
   - **CAGED shape outlines**
   - **position windows**
   - **chord-diagram mini-view**
-- **Input:** pointer and touch. `touch-action` prevents scrolling while tapping the neck. Arrow keys move between cells; Enter or Space selects. There is visible focus.
+- **Input:** pointer and touch. A tap selects a position; a swipe scrolls the whole page without selecting a note or submitting an answer. Practice prompts remain visible while scrolling. Arrow keys move between cells; Enter or Space selects. There is visible focus.
 - **Screen readers:** an equivalent semantic grid or list labels every cell, e.g. 「第 5 弦 第 7 格 E」.
 - **Audio:** tapping plays the note when audio is enabled.
 - **Performance:** no permanent animation loop. Resize and orientation changes are handled. Labels stay legible under text scaling.
