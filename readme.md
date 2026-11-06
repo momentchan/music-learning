@@ -75,7 +75,7 @@ npm run build
 - **Phases C–D:** Tier 2 and Tier 3 nodes (barre/CAGED, modes, cadences, secondary dominants, improvisation, composition), circle of fifths, pentatonic positions.
 
 ### Known limitations
-- The Lab fretboard quiz still covers frets 1–12. Guided sessions use 0–12.
+- The Lab fretboard quiz covers frets 1–12. On phones, the entire neck fits above the navigation in Explore, One note and Random review without scrolling. Fret spacing adapts to the available height; text and circular markers keep their proportions. Guided sessions use 0–12.
 - Rhythm timing on phones is approximate even after calibration.
 - Only standard tuning is used in exercises.
 - The UI is zh-TW. The shared strings sit in a catalog (`src/i18n`), but some screen copy and the Lab tools are not yet translated.
