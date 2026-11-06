@@ -1,4 +1,3 @@
-import { useEffect, useState } from 'react'
 import { ChordDiagram } from '../../components/diagram/ChordDiagram'
 import { Fretboard, type FretMark } from '../../components/fretboard/Fretboard'
 import { NotePicker, PitchPicker } from '../../components/NotePicker'
@@ -23,8 +22,6 @@ export function QuestionView({ question, grade, response, onSubmit, layout }: Pr
   const answered = grade !== null
   const play = useAudioUi(s => s.play)
   const leftHanded = useLearning(s => s.preferences.leftHanded)
-  const [selected, setSelected] = useState<{ string: number; fret: number } | null>(null)
-  useEffect(() => setSelected(null), [question.id])
 
   const audioButton = question.audio && <div className="question-audio">
     <button type="button" className="primary-button" onClick={() => void play(question.audio!)}>{answered ? '↻ 再聽一次' : '▶ 播放題目'}</button>
@@ -70,20 +67,11 @@ export function QuestionView({ question, grade, response, onSubmit, layout }: Pr
     if (answered) {
       for (const p of grade!.correctPositions ?? locateTargets(question)) marks.push({ string: p.string, fret: p.fret, label: question.targetLabel.split(' ')[0], tone: 'correct' })
       if (response?.kind === 'fret-locate' && grade!.result !== 'correct') marks.push({ string: response.string, fret: response.fret, label: '✕', tone: 'wrong' })
-    } else if (selected) marks.push({ string: selected.string, fret: selected.fret, label: '●', tone: 'selected' })
-    const select = (string: number, fret: number) => {
-      if (answered) return
-      if (selected && selected.string === string && selected.fret === fret) onSubmit({ kind: 'fret-locate', string, fret })
-      else setSelected({ string, fret })
     }
     return <div className="question">
       <h2 className="question-prompt">{question.prompt}</h2>
       <div className="question-visual board"><Fretboard leftHanded={leftHanded} tuning={question.tuning} orientation={layout} minFret={0} maxFret={question.maxFret === 0 ? 5 : question.maxFret}
-        marks={marks} onSelect={select} disabled={answered} label="可點選的指板，選好後再點一次或按確定"/></div>
-      {!answered && <div className="locate-confirm">
-        <span>{selected ? `已選：第 ${selected.string} 弦 ${selected.fret === 0 ? '空弦' : `第 ${selected.fret} 格`}` : '點一個位置（再點一次或按確定送出）'}</span>
-        <button type="button" className="primary-button" disabled={!selected} onClick={() => selected && onSubmit({ kind: 'fret-locate', ...selected })}>確定</button>
-      </div>}
+        marks={marks} onSelect={(string, fret) => { if (!answered) onSubmit({ kind: 'fret-locate', string, fret }) }} disabled={answered} label="可點選的指板，點一個位置就送出"/></div>
     </div>
   }
 

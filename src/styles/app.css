@@ -92,7 +92,6 @@
 .feedback-actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px}
 .feedback .feedback-actions button{margin:0;display:inline-block}
 .feedback-actions .primary-button{margin-left:auto}
-.locate-confirm{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:10px;font-size:13px;color:#c3cdd5}
 .bridge-text{font-size:15px;line-height:1.7;color:#e5ebef;background:#1f2a33;border-radius:12px;padding:12px 14px}
 .summary-stats{padding-left:18px;color:#d2dae1;font-size:14px}
 .summary-errors ul{padding-left:18px;color:#f1c294;font-size:13px}

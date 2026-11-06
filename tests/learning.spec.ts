@@ -26,7 +26,6 @@ async function answerCurrent(page: Page): Promise<boolean> {
     await cell.focus()
     await page.keyboard.press('ArrowRight')
     await page.keyboard.press('Enter')
-    await page.keyboard.press('Enter')
   } else if (await choice.isVisible().catch(() => false)) await choice.click()
   else {
     const letter = page.locator('.picker-letters button').first()
@@ -73,7 +72,6 @@ test('wrong answers get specific feedback, a retry, and a later recheck', async 
   const string = Number(/第 (\d) 弦/.exec(prompt!)![1])
   const other = string === 6 ? 5 : 6
   await page.locator(`.fret-cell.interactive[data-cell="${other}-1"]`).click()
-  await page.getByRole('button', { name: '確定' }).click()
   await expect(page.getByRole('status').filter({ hasText: '還不對' })).toBeVisible()
   const total = Number((await page.locator('.session-bar small').textContent())!.split('/')[1])
   await page.getByRole('button', { name: '再試一次' }).click()
@@ -148,8 +146,7 @@ test('session fretboard preserves proportions and hides open-string hints on a 3
   const tallerRatio = await board.evaluate(element => { const box = element.getBoundingClientRect(); return box.width / box.height })
   expect(tallerRatio).toBeCloseTo(ratio, 3)
   await page.locator('.fret-cell.interactive[data-cell="6-5"]').tap()
-  await expect(page.getByText('已選：第 6 弦 第 5 格')).toBeVisible()
-  await page.locator('.fret-cell.interactive[data-cell="6-6"]').tap()
-  await expect(page.getByText('已選：第 6 弦 第 6 格')).toBeVisible()
+  await expect(page.getByRole('status').filter({ hasText: /正確|還不對|部分正確/ })).toBeVisible()
+  await expect(page.getByRole('button', { name: '確定' })).toHaveCount(0)
   await context.close()
 })
