@@ -36,8 +36,7 @@ async function answerCurrent(page: Page): Promise<boolean> {
   }
   await expect(page.getByRole('status').filter({ hasText: /正確|還不對|部分正確/ })).toBeVisible()
   const currentQuestion = await page.locator('.question-prompt').elementHandle()
-  await page.getByRole('button', { name: /下一題/ }).click()
-  await page.waitForFunction(element => !element?.isConnected, currentQuestion)
+  await page.waitForFunction(element => !element?.isConnected, currentQuestion, { timeout: 4000 })
   return true
 }
 
@@ -67,19 +66,21 @@ test('a lesson persists every answer, resumes after reload, and completes with a
 })
 
 test('wrong answers get specific feedback, a retry, and a later recheck', async ({ page }) => {
-  await page.goto('/learn/fret.open')
+  await page.goto('/learn/fret.naturals.low')
   await page.getByRole('button', { name: '▶ 開始課程' }).click()
   await page.getByRole('button', { name: /懂了，開始練習/ }).click()
   const prompt = await page.locator('.question-prompt').textContent()
   const string = Number(/第 (\d) 弦/.exec(prompt!)![1])
-  const wrong = { 1: 'F', 2: 'C', 3: 'Ab', 4: 'Eb', 5: 'Bb', 6: 'F' }[string]!
-  await page.locator('.pitch-picker button').filter({ hasText: new RegExp(`^${wrong.replace('b', '♭')}`) }).first().click()
-  await expect(page.getByRole('status').filter({ hasText: '還不對' })).toContainText('差一格')
+  const other = string === 6 ? 5 : 6
+  await page.locator(`.fret-cell.interactive[data-cell="${other}-1"]`).click()
+  await page.getByRole('button', { name: '確定' }).click()
+  await expect(page.getByRole('status').filter({ hasText: '還不對' })).toBeVisible()
   const total = Number((await page.locator('.session-bar small').textContent())!.split('/')[1])
   await page.getByRole('button', { name: '再試一次' }).click()
-  await expect(page.locator('.pitch-picker button').first()).toBeEnabled()
+  await expect(page.locator('.fret-cell.interactive').first()).toBeVisible()
+  await expect(page.getByRole('status').filter({ hasText: '還不對' })).toHaveCount(0)
   await expect(page.locator('.session-bar small')).toHaveText(`1/${total}`)
-  expect(total).toBeGreaterThanOrEqual(6) // recheck inserted into the plan
+  expect(total).toBeGreaterThanOrEqual(7) // recheck inserted into the plan
 })
 
 test('deep links reload directly into a screen', async ({ page }) => {

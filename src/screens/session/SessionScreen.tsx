@@ -24,10 +24,12 @@ export function SessionScreen({ sessionId }: { sessionId: string }) {
   const [answer, setAnswer] = useState<AnswerState | null>(null)
   const [retry, setRetry] = useState<RetryState | null>(null)
   const [showWhy, setShowWhy] = useState(false)
+  const [holdAdvance, setHoldAdvance] = useState(false)
   const [saveError, setSaveError] = useState('')
   const [boxChanges, setBoxChanges] = useState({ promoted: 0, demoted: 0 })
   const shownAt = useRef(performance.now())
   const busy = useRef(false)
+  const advanceRef = useRef<() => void>(() => {})
   const learning = useLearning()
   const { play, stop } = useAudioUi()
 
@@ -41,7 +43,15 @@ export function SessionScreen({ sessionId }: { sessionId: string }) {
     return () => { cancelled = true; stop() }
   }, [sessionId, stop])
 
-  useEffect(() => { shownAt.current = performance.now(); setShowWhy(false); setRetry(null) }, [view])
+  useEffect(() => { shownAt.current = performance.now(); setShowWhy(false); setHoldAdvance(false); setRetry(null) }, [view])
+
+  // Show the marked fret briefly, then move on. A wrong answer stays longer so the correct position can be seen.
+  useEffect(() => {
+    if (!answer || holdAdvance || !session || session.status === 'completed' || session.cursor <= view) return
+    const delay = answer.grade.result === 'correct' ? 600 : 1800
+    const timer = window.setTimeout(() => advanceRef.current(), delay)
+    return () => window.clearTimeout(timer)
+  }, [answer, holdAdvance, session, view])
 
   const item: PlannedItem | undefined = session?.plannedItems[view]
   const questionCount = session?.plannedItems.filter(i => i.kind === 'question').length ?? 0
@@ -78,7 +88,8 @@ export function SessionScreen({ sessionId }: { sessionId: string }) {
       outcomes: isRetry ? session.outcomes : [...session.outcomes.filter(o => o.index !== view), outcome],
     }
     setAnswer({ grade, response, attemptId: attempt.id, firstAttemptId: retry?.firstAttemptId ?? attempt.id })
-    setShowWhy(grade.result !== 'correct')
+    setShowWhy(false)
+    setHoldAdvance(false)
     const before = attempt.reviewItemIds.map(id => learning.reviews.get(id)?.box ?? 0)
     try {
       const { reviews } = await repository.recordAttempt(attempt, isRetry ? undefined : { id: session.id, cursor: next.cursor, plannedItems, outcome })
@@ -152,6 +163,8 @@ export function SessionScreen({ sessionId }: { sessionId: string }) {
     void navigator.storage?.persist?.().catch(() => undefined)
   }
 
+  advanceRef.current = () => { void advance() }
+
   const progress = questionCount ? Math.min(1, answeredCount / questionCount) : 0
   const node = item.kind === 'question' ? nodeById(item.question.nodeId) : nodeById(item.nodeId)
   const needsAudio = item.kind === 'question' && !!item.question.audio && !audioIsOn()
@@ -198,12 +211,12 @@ export function SessionScreen({ sessionId }: { sessionId: string }) {
         <strong>{answer.grade.result === 'correct' ? '✓ 正確' : answer.grade.result === 'partial' ? '◐ 部分正確' : '✕ 還不對'}</strong>
         <p>{answer.grade.feedback}</p>
         {answer.grade.result !== 'correct' && <p className="expected">正確答案：{answer.grade.expectedText}</p>}
-        {showWhy && <p className="explanation-text">{item.question.explanation}</p>}
+        {offersWhy(item.question) && showWhy && <p className="explanation-text">{item.question.explanation}</p>}
         <div className="feedback-actions">
           {answer.grade.result !== 'correct' && <button type="button" className="secondary-button" onClick={() => { setRetry({ firstAttemptId: answer.firstAttemptId, count: (retry?.count ?? 0) + 1 }); setAnswer(null); shownAt.current = performance.now() }}>{t.common.retry}</button>}
-          <button type="button" className="secondary-button" onClick={() => setShowWhy(!showWhy)} aria-expanded={showWhy}>{showWhy ? t.common.hideWhy : t.common.why}</button>
-          {item.question.answerAudio && <button type="button" className="secondary-button" onClick={() => void play(item.question.answerAudio!)}>▶ 聽答案</button>}
-          <button type="button" className="primary-button" autoFocus onClick={() => void advance()}>{t.common.next} →</button>
+          {offersWhy(item.question) && <button type="button" className="secondary-button" onClick={() => { setHoldAdvance(true); setShowWhy(!showWhy) }} aria-expanded={showWhy}>{showWhy ? t.common.hideWhy : t.common.why}</button>}
+          {item.question.answerAudio && <button type="button" className="secondary-button" onClick={() => { setHoldAdvance(true); void play(item.question.answerAudio!) }}>▶ 聽答案</button>}
+          {holdAdvance && <button type="button" className="primary-button" onClick={() => void advance()}>{t.common.next} →</button>}
         </div>
       </div>}
     </article>}
@@ -233,4 +246,16 @@ function SessionSummaryView({ session, boxChanges }: { session: PracticeSession;
       <button className="secondary-button" onClick={() => navigate('/')}>回到今日</button>
     </div>
   </div>
+}
+
+/** "Find this note on string N" already shows the fret in the result. No extra why. */
+const NOTE_FIND_TEMPLATES = new Set([
+  'fret.naturals.all.locate',
+  'fret.naturals.low.locate',
+  'fret.accidentals.locate',
+  'fret.open.locate',
+])
+
+function offersWhy(question: Question): boolean {
+  return question.explanation.trim().length > 0 && !NOTE_FIND_TEMPLATES.has(question.templateId)
 }
