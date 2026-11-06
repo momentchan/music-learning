@@ -1,33 +1,5 @@
-import { test, expect, type Page } from '@playwright/test'
+import { test, expect } from '@playwright/test'
 import { positionsForNote } from '../src/music/fretboardQuiz'
-
-async function swipePageUp(page: Page) {
-  const board = (await page.locator('svg.fretboard').boundingBox())!
-  const navigation = (await page.locator('.bottom-nav').boundingBox())!
-  const controls = (await page.locator('.fretboard-controls').boundingBox())!
-  const touch = await page.context().newCDPSession(page)
-  const startY = Math.min(navigation.y - 30, board.y + board.height - 30)
-  const endY = controls.y + controls.height + 30
-  const x = board.x + board.width / 2
-  await touch.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x, y: startY, id: 1 }] })
-  for (let step = 1; step <= 8; step++) await touch.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x, y: startY + (endY - startY) * step / 8, id: 1 }] })
-  // Pause with the finger down to avoid a fling consuming the next tap.
-  await page.waitForTimeout(150)
-  await touch.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x, y: endY, id: 1 }] })
-  await touch.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] })
-  await expect.poll(() => page.evaluate(() => window.scrollY)).toBeGreaterThan(0)
-  await page.evaluate(async () => {
-    let previous = window.scrollY
-    let stable = 0
-    while (stable < 8) {
-      await new Promise(requestAnimationFrame)
-      const current = window.scrollY
-      stable = Math.abs(current - previous) < 0.5 ? stable + 1 : 0
-      previous = current
-    }
-  })
-  await touch.detach()
-}
 
 test('fretboard note selection and silent mode', async ({ page }) => {
   await page.goto('/lab/fretboard')
@@ -63,66 +35,82 @@ test('ear question validates and persists after reload', async ({ page }) => {
   await expect(page.locator('.history > div')).toHaveCount(1)
 })
 
-test('phone preserves fretboard proportions and scrolls the whole page without selecting notes', async ({ browser }, testInfo) => {
-  const context = await browser.newContext({ viewport: { width: 320, height: 568 }, isMobile: true, hasTouch: true })
-  const page = await context.newPage()
-  await page.goto('/lab/fretboard')
-  await expect(page.locator('svg.fretboard > .svg-fret-label')).toHaveCount(12)
-  await expect(page.getByRole('group', { name: 'Vertical six-string guitar fretboard, frets 1 to 12' })).toBeVisible()
-  await expect(page.getByRole('group', { name: 'Fret range' })).toHaveCount(0)
-  const board = page.locator('svg.fretboard')
-  const viewport = page.locator('.fretboard-scroll')
-  expect(await page.locator('.svg-string-label').allTextContents()).toEqual(['6', '5', '4', '3', '2', '1'])
-  const widths = await page.locator('.svg-string-label').evaluateAll(labels => labels.map(label => Number(label.parentElement!.querySelector('line')!.getAttribute('stroke-width'))))
-  expect(widths[0]).toBeGreaterThan(widths[5])
-  const proportions = await board.evaluate(element => {
-    const svg = element as SVGSVGElement
-    const bounds = svg.getBoundingClientRect()
-    return { displayed: bounds.width / bounds.height, original: svg.viewBox.baseVal.width / svg.viewBox.baseVal.height }
-  })
-  expect(proportions.displayed).toBeCloseTo(proportions.original, 3)
-  expect(await viewport.evaluate(element => getComputedStyle(element).overflowY)).toBe('visible')
-  await page.locator('svg.fretboard g[aria-label="String 6, fret 1, F2"]').tap()
-  await expect(page.locator('.selected-note strong')).toHaveText('F2')
-  await page.screenshot({ path: testInfo.outputPath('mobile-fretboard.png') })
-  await swipePageUp(page)
-  expect(await page.evaluate(() => window.scrollY)).toBeGreaterThan(80)
-  expect(await viewport.evaluate(element => element.scrollTop)).toBe(0)
-  await expect(page.locator('.selected-note strong')).toHaveText('F2')
-  await page.locator('svg.fretboard g[aria-label="String 1, fret 11, D#5"]').tap()
-  await expect(page.getByText('String 1 · fret 11', { exact: false })).toBeVisible()
-  await page.locator('svg.fretboard g[aria-label="String 1, fret 12, E5"]').tap()
-  await expect(page.getByText('String 1 · fret 12', { exact: false })).toBeVisible()
-  expect(await page.locator('.fretboard-scroll').evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true)
-  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
-  await page.getByRole('group', { name: 'Fretboard mode' }).getByRole('button', { name: 'One note' }).click()
-  await page.evaluate(() => window.scrollTo(0, 0))
-  expect(await page.evaluate(() => document.querySelector('.fretboard-controls')!.getBoundingClientRect().top >= 0)).toBe(true)
-  await page.getByRole('group', { name: 'Fretboard mode' }).getByRole('button', { name: 'Random review' }).click()
-  await expect(page.locator('.fretboard-quiz')).toBeInViewport()
-  const mobileNote = await page.locator('.fretboard-quiz strong').evaluate(element => element.firstChild?.textContent || '')
-  const mobileString = Number((await page.locator('.fretboard-quiz strong em').textContent())!.replace('string ', ''))
-  const otherPosition = positionsForNote(mobileNote).find(position => position.string !== mobileString)!
-  await page.locator(`svg.fretboard g[aria-label="String ${otherPosition.string}, fret ${otherPosition.fret}"]`).tap()
-  await expect(page.getByRole('status')).toContainText(`Try string ${mobileString}`)
-  await expect(page.locator('.fretboard-quiz')).toBeInViewport()
-  await context.close()
-})
+for (const size of [{ width: 320, height: 568 }, { width: 390, height: 650 }, { width: 430, height: 932 }]) {
+  test(`phone ${size.width}x${size.height} shows all twelve frets in every mode without scrolling`, async ({ browser }, testInfo) => {
+    const context = await browser.newContext({ viewport: size, isMobile: true, hasTouch: true })
+    const page = await context.newPage()
+    await page.goto('/lab/fretboard')
+    const board = page.locator('svg.fretboard')
+    expect(await page.locator('.svg-string-label').allTextContents()).toEqual(['6', '5', '4', '3', '2', '1'])
+    const widths = await page.locator('.svg-string-label').evaluateAll(labels => labels.map(label => Number(label.parentElement!.querySelector('line')!.getAttribute('stroke-width'))))
+    expect(widths[0]).toBeGreaterThan(widths[5])
 
-test('swiping a quiz keeps its prompt visible and does not create an attempt', async ({ browser }) => {
-  const context = await browser.newContext({ viewport: { width: 390, height: 650 }, isMobile: true, hasTouch: true })
-  const page = await context.newPage()
-  await page.goto('/lab/fretboard')
-  await page.getByRole('button', { name: 'One note', exact: true }).click()
-  await swipePageUp(page)
-  expect(await page.evaluate(() => window.scrollY)).toBeGreaterThan(80)
-  await expect(page.locator('.fretboard-quiz')).toBeInViewport()
-  await expect(page.getByRole('status')).toHaveText('Find it on every string')
-  await expect(page.locator('.quiz-guidance')).toContainText('0 correct, 0 missed')
-  await page.locator('svg.fretboard g[aria-label="String 6, fret 8"]').tap()
-  await expect(page.getByText('1 / 6 found')).toBeVisible()
-  await context.close()
-})
+    async function expectFullBoard() {
+      await expect(board.locator(':scope > .svg-fret-label')).toHaveCount(12)
+      await expect.poll(async () => {
+        const bounds = (await board.boundingBox())!
+        const nav = (await page.locator('.bottom-nav').boundingBox())!
+        return bounds.y >= 0 && bounds.y + bounds.height <= nav.y - 5
+      }).toBe(true)
+      for (const fret of [1, 12]) {
+        for (const string of [1, 6]) {
+          const target = board.getByRole('button', { name: new RegExp(`^String ${string}, fret ${fret}(,|$)`) }).locator('rect')
+          await expect(target).toBeInViewport({ ratio: 1 })
+        }
+      }
+      const scale = await board.evaluate(element => {
+        const transform = (element as SVGSVGElement).getScreenCTM()!
+        return { x: transform.a, y: transform.d }
+      })
+      expect(scale.x).toBeCloseTo(scale.y, 3)
+      expect(await page.evaluate(() => window.scrollY)).toBe(0)
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
+    }
+
+    await expectFullBoard()
+    await board.locator('g[aria-label="String 6, fret 1, F2"]').tap()
+    await expect(page.locator('.selected-note strong')).toHaveText('F2')
+    await board.locator('g[aria-label="String 1, fret 11, D#5"]').tap()
+    await expect(page.locator('.selected-note strong')).toHaveText('D#5')
+    await board.locator('g[aria-label="String 1, fret 12, E5"]').tap()
+    await expect(page.locator('.selected-note strong')).toHaveText('E5')
+    await expectFullBoard()
+    await page.getByRole('button', { name: 'Show labels', exact: true }).click()
+    await expect(board.locator('.svg-note')).toHaveCount(72)
+    await expectFullBoard()
+
+    await page.getByRole('button', { name: 'One note', exact: true }).click()
+    await expectFullBoard()
+    await expect(page.getByRole('status')).toHaveText('Find it on every string')
+    // Include fret 12 and all six strings; a correct tap must resolve the intended cell.
+    await page.getByLabel('Practice note', { exact: true }).selectOption('E')
+    for (const [index, position] of positionsForNote('E').entries()) {
+      await board.locator(`g[aria-label="String ${position.string}, fret ${position.fret}"]`).tap()
+      await expect(page.getByText(`${index + 1} / 6 found`)).toBeVisible()
+      await expectFullBoard()
+    }
+    await expect(page.getByRole('button', { name: 'Next note' })).toBeVisible()
+    await page.screenshot({ path: testInfo.outputPath('mobile-twelve-frets.png') })
+
+    await page.getByRole('button', { name: 'Random review', exact: true }).click()
+    await expectFullBoard()
+    const note = await page.locator('.fretboard-quiz strong').evaluate(element => element.firstChild?.textContent || '')
+    const string = Number((await page.locator('.fretboard-quiz strong em').textContent())!.replace('string ', ''))
+    const other = positionsForNote(note).find(position => position.string !== string)!
+    await board.locator(`g[aria-label="String ${other.string}, fret ${other.fret}"]`).tap()
+    await expect(page.getByRole('status')).toContainText(`Try string ${string}`)
+    await expectFullBoard()
+    const correct = positionsForNote(note).find(position => position.string === string)!
+    await board.locator(`g[aria-label="String ${correct.string}, fret ${correct.fret}"]`).tap()
+    await expect(page.getByRole('button', { name: 'Next', exact: false })).toBeVisible()
+    await expectFullBoard()
+
+    // Recompute geometry when browser chrome or viewport size changes.
+    await page.setViewportSize({ width: size.width, height: size.height - 64 })
+    await expectFullBoard()
+    await context.close()
+  })
+}
 
 test('one-note practice checks positions and keeps a local record', async ({ page }) => {
   await page.goto('/lab/fretboard')

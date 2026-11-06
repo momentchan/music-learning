@@ -108,6 +108,11 @@
 @media(max-width:700px){
   .fretboard-scroll{overflow:visible;overscroll-behavior:auto;touch-action:pan-y pinch-zoom;user-select:none}
   .fretboard-page .fretboard-scroll .fretboard.vertical,.fretboard-page .fretboard-card.practice .fretboard.vertical{height:auto}
+  .fretboard-page .fretboard-quiz{display:grid;grid-template-columns:minmax(0,1fr) 105px;gap:5px 8px}
+  .fretboard-page .fretboard-quiz>div{grid-column:1;grid-row:1}
+  .fretboard-page .fretboard-quiz:has(>label):has(>button)>div{grid-row:1 / span 2}
+  .fretboard-page .fretboard-quiz>label,.fretboard-page .fretboard-quiz>button{grid-column:2}
+  .fretboard-page .fretboard-quiz .eyebrow{white-space:nowrap;letter-spacing:1px;font-size:9px}
   .fretboard-controls{position:sticky;top:0;z-index:5;background:#1b222d;padding:4px 0;box-shadow:0 5px 8px #1b222d}
   .question-prompt{position:sticky;top:0;z-index:5;background:#1b222d;padding:8px 0}
 }

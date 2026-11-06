@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { audioEngine } from '../../audio/AudioEngine'
 import { db, saveAttempt, type AudioAttempt } from '../../data/db'
 import { COMPARISONS, comparisonEvents } from '../../music/comparisons'
@@ -34,13 +34,14 @@ const MOBILE_FRET_WIRES = [32]
 for (let fret = 1; fret <= 12; fret++) {
   MOBILE_FRET_WIRES.push(MOBILE_FRET_WIRES[fret - 1] + Math.max(40, 54 * Math.pow(2, -(fret - 1) / 12)))
 }
-const MOBILE_FRET_CENTERS = Array.from({ length: 13 }, (_, fret) => fret === 0 ? 0 : (MOBILE_FRET_WIRES[fret - 1] + MOBILE_FRET_WIRES[fret]) / 2)
 const MOBILE_FRETBOARD_HEIGHT = Math.ceil(MOBILE_FRET_WIRES[12]) + 32
 
 export function Fretboard({ run }: { run: (fn: () => Promise<unknown>) => Promise<void> }) {
   const [selected, setSelected] = useState<{ string: number; fret: number; midi: number } | null>(null)
   const [showAll, setShowAll] = useState(false)
   const [narrow, setNarrow] = useState(() => typeof window !== 'undefined' && window.matchMedia('(max-width: 700px)').matches)
+  const boardRef = useRef<HTMLDivElement>(null)
+  const [mobileHeight, setMobileHeight] = useState(MOBILE_FRETBOARD_HEIGHT)
   const [practiceLayout, setPracticeLayout] = useState<'vertical' | 'horizontal'>(() => (typeof localStorage !== 'undefined' && localStorage.getItem('guitar-lab.practiceLayout') === 'horizontal') ? 'horizontal' : 'vertical')
   const [mode, setMode] = useState<'explore' | 'one-note' | 'random'>('explore')
   const [singleNote, setSingleNote] = useState<string>('C')
@@ -66,6 +67,38 @@ export function Fretboard({ run }: { run: (fn: () => Promise<unknown>) => Promis
   const progress = reviewSummary(quizAttempts, Date.now())
   // Practice reads top-to-bottom like a chord chart: vertical by default on every screen size.
   const vertical = narrow || (mode !== 'explore' && practiceLayout === 'vertical')
+  // Change the fret spacing, rather than stretching the SVG: circles and text stay round.
+  const boardHeight = narrow ? mobileHeight : MOBILE_FRETBOARD_HEIGHT
+  const fretScale = (boardHeight - 64) / (MOBILE_FRET_WIRES[12] - 32)
+  const mobileWires = MOBILE_FRET_WIRES.map(y => 32 + (y - 32) * fretScale)
+  const mobileCenters = Array.from({ length: 13 }, (_, fret) => fret === 0 ? 0 : (mobileWires[fret - 1] + mobileWires[fret]) / 2)
+  useLayoutEffect(() => {
+    if (!narrow || !boardRef.current) return
+    const board = boardRef.current
+    const navigation = document.querySelector('.bottom-nav')
+    const measure = () => {
+      const bounds = board.getBoundingClientRect()
+      if (!bounds.width) return
+      // Document coordinates keep the size stable when the user scrolls to the extra controls.
+      const top = bounds.top + window.scrollY
+      const viewportHeight = window.visualViewport?.height ?? window.innerHeight
+      const bottom = viewportHeight - (navigation?.getBoundingClientRect().height ?? 0) - 8
+      const height = Math.min(MOBILE_FRETBOARD_HEIGHT, Math.max(160, (bottom - top) * 300 / bounds.width))
+      setMobileHeight(previous => Math.abs(previous - height) < 0.5 ? previous : height)
+    }
+    const observer = new ResizeObserver(measure)
+    observer.observe(board)
+    if (board.previousElementSibling) observer.observe(board.previousElementSibling)
+    if (navigation) observer.observe(navigation)
+    window.addEventListener('resize', measure)
+    window.visualViewport?.addEventListener('resize', measure)
+    measure()
+    return () => {
+      observer.disconnect()
+      window.removeEventListener('resize', measure)
+      window.visualViewport?.removeEventListener('resize', measure)
+    }
+  }, [narrow])
   function changePracticeLayout(next: 'vertical' | 'horizontal') {
     setPracticeLayout(next)
     try { localStorage.setItem('guitar-lab.practiceLayout', next) } catch { /* preference is optional */ }
@@ -132,8 +165,9 @@ export function Fretboard({ run }: { run: (fn: () => Promise<unknown>) => Promis
     const foundPosition = mode === 'one-note' && found.includes(`${string}-${fret}`)
     const wrongPosition = mode !== 'explore' && active && lastResult?.correct === false
     const marked = active || foundPosition
+    const radius = vertical ? Math.min(marked ? 16 : 12, (hit.height - 4) / 2) : marked ? 16 : 12
     return <g key={`${string}-${fret}`} className={`fret-position${marked ? ' selected' : ''}`} onClick={() => void choose(string, fret)} onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); void choose(string, fret) } }} role="button" tabIndex={0} aria-label={`String ${6 - string}, fret ${fret}${mode === 'explore' || roundDone ? `, ${noteName(midi)}` : ''}`}>
-      <rect {...hit} fill="transparent"/><circle className="note-target" cx={x} cy={y} r={marked ? 16 : 12} fill={foundPosition ? '#3b9a70' : wrongPosition ? '#bb594e' : active ? '#ee765e' : showAll ? '#29313b' : 'transparent'} stroke={foundPosition ? '#b6efcf' : wrongPosition ? '#ffd4c9' : active ? '#ffd5a5' : showAll ? '#b6a994' : 'transparent'} strokeWidth="1.5"/>{(showAll || marked) && <text x={x} y={y + 4} textAnchor="middle" className="svg-note">{noteName(midi).replace(/\d/, '')}</text>}
+      <rect {...hit} fill="transparent"/><circle className="note-target" cx={x} cy={y} r={radius} fill={foundPosition ? '#3b9a70' : wrongPosition ? '#bb594e' : active ? '#ee765e' : showAll ? '#29313b' : 'transparent'} stroke={foundPosition ? '#b6efcf' : wrongPosition ? '#ffd4c9' : active ? '#ffd5a5' : showAll ? '#b6a994' : 'transparent'} strokeWidth="1.5"/>{(showAll || marked) && <text x={x} y={y + 4} textAnchor="middle" className="svg-note">{noteName(midi).replace(/\d/, '')}</text>}
     </g>
   }
   return <><section className="intro-card"><div><p className="eyebrow">01 / INTERACTIVE INSTRUMENT</p><h2>Hear every position.</h2><p>Explore the neck or practice finding notes on frets 1–12.</p></div><div className="pulse-icon">♪</div></section>
@@ -144,17 +178,17 @@ export function Fretboard({ run }: { run: (fn: () => Promise<unknown>) => Promis
       {mode !== 'explore' && !narrow && <div className="fretboard-modes layout-toggle" role="group" aria-label="Practice layout"><button className={practiceLayout === 'vertical' ? 'active' : ''} aria-pressed={practiceLayout === 'vertical'} onClick={() => changePracticeLayout('vertical')}>直式 Vertical</button><button className={practiceLayout === 'horizontal' ? 'active' : ''} aria-pressed={practiceLayout === 'horizontal'} onClick={() => changePracticeLayout('horizontal')}>橫式 Horizontal</button></div>}
       {quizError && <div className="notice" role="alert">{quizError}</div>}
       </div>
-      <div className="fretboard-scroll" role="region" aria-label={vertical ? 'Fretboard frets 1 to 12' : 'Scroll horizontally through frets 1 to 12'} tabIndex={0}>
-        {vertical ? <svg className="fretboard vertical" width="300" height={MOBILE_FRETBOARD_HEIGHT} viewBox={`0 0 300 ${MOBILE_FRETBOARD_HEIGHT}`} preserveAspectRatio="xMidYMin meet" role="group" aria-label="Vertical six-string guitar fretboard, frets 1 to 12">
+      <div ref={boardRef} className="fretboard-scroll" role="region" aria-label={vertical ? 'Fretboard frets 1 to 12' : 'Scroll horizontally through frets 1 to 12'} tabIndex={0}>
+        {vertical ? <svg className="fretboard vertical" width="300" height={boardHeight} viewBox={`0 0 300 ${boardHeight}`} preserveAspectRatio="xMidYMin meet" role="group" aria-label="Vertical six-string guitar fretboard, frets 1 to 12">
           <defs><linearGradient id="fretboard-wood" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stopColor="#5a4030"/><stop offset="0.5" stopColor="#3c2b25"/><stop offset="1" stopColor="#59402f"/></linearGradient></defs>
-          <rect x="45" y="30" width="220" height={MOBILE_FRET_WIRES[12] - 8} fill="url(#fretboard-wood)"/>
-          {[3, 5, 7, 9].map(fret => <circle key={fret} cx="155" cy={MOBILE_FRET_CENTERS[fret]} r="8" fill="#d8c7a9" opacity="0.7"/>)}
-          {[111, 199].map(x => <circle key={x} cx={x} cy={MOBILE_FRET_CENTERS[12]} r="8" fill="#d8c7a9" opacity="0.7"/>)}
-          <rect x="45" y={MOBILE_FRET_WIRES[0] - 4} width="220" height="8" rx="2" fill="#ead9be"/>
-          {MOBILE_FRET_WIRES.slice(1).map((y, fret) => <g key={fret}><line x1="45" y1={y + 1} x2="265" y2={y + 1} stroke="#1b1b1b" strokeWidth="4" opacity="0.4"/><line x1="45" y1={y} x2="265" y2={y} stroke="#c8c8c0" strokeWidth="3"/></g>)}
-          {verticalStrings.map((string, col) => <g key={string}><line x1={45 + col * 44} y1="32" x2={45 + col * 44} y2={MOBILE_FRET_WIRES[12] + 20} stroke="#c5bdb1" strokeWidth={1.2 + (5 - string) * 0.45}/><text x={45 + col * 44} y="21" textAnchor="middle" className="svg-string-label" aria-label={`String ${6 - string}`}>{6 - string}</text>
-            {frets.map(fret => noteTarget(string, fret, 45 + col * 44, MOBILE_FRET_CENTERS[fret], { x: 24 + col * 44, y: MOBILE_FRET_WIRES[fret - 1], width: 42, height: MOBILE_FRET_WIRES[fret] - MOBILE_FRET_WIRES[fret - 1] }))}</g>)}
-          {frets.map(fret => <text key={fret} x="14" y={MOBILE_FRET_CENTERS[fret] + 4} textAnchor="middle" className="svg-fret-label">{fret}</text>)}
+          <rect x="45" y="30" width="220" height={mobileWires[12] - 8} fill="url(#fretboard-wood)"/>
+          {[3, 5, 7, 9].map(fret => <circle key={fret} cx="155" cy={mobileCenters[fret]} r="8" fill="#d8c7a9" opacity="0.7"/>)}
+          {[111, 199].map(x => <circle key={x} cx={x} cy={mobileCenters[12]} r="8" fill="#d8c7a9" opacity="0.7"/>)}
+          <rect x="45" y={mobileWires[0] - 4} width="220" height="8" rx="2" fill="#ead9be"/>
+          {mobileWires.slice(1).map((y, fret) => <g key={fret}><line x1="45" y1={y + 1} x2="265" y2={y + 1} stroke="#1b1b1b" strokeWidth="4" opacity="0.4"/><line x1="45" y1={y} x2="265" y2={y} stroke="#c8c8c0" strokeWidth="3"/></g>)}
+          {verticalStrings.map((string, col) => <g key={string}><line x1={45 + col * 44} y1="32" x2={45 + col * 44} y2={mobileWires[12] + 20} stroke="#c5bdb1" strokeWidth={1.2 + (5 - string) * 0.45}/><text x={45 + col * 44} y="21" textAnchor="middle" className="svg-string-label" aria-label={`String ${6 - string}`}>{6 - string}</text>
+            {frets.map(fret => noteTarget(string, fret, 45 + col * 44, mobileCenters[fret], { x: 24 + col * 44, y: mobileWires[fret - 1], width: 42, height: mobileWires[fret] - mobileWires[fret - 1] }))}</g>)}
+          {frets.map(fret => <text key={fret} x="14" y={mobileCenters[fret] + 4} textAnchor="middle" className="svg-fret-label">{fret}</text>)}
         </svg> : <svg className="fretboard" width={FRETBOARD_WIDTH} height="330" viewBox={`0 0 ${FRETBOARD_WIDTH} 330`} role="group" aria-label="Six-string guitar fretboard, frets 1 to 12">
           <defs><linearGradient id="fretboard-wood" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#5a4030"/><stop offset="0.5" stopColor="#3c2b25"/><stop offset="1" stopColor="#59402f"/></linearGradient></defs>
           <rect x="38" y="54" width={FRET_WIRES[12] - 18} height="215" fill="url(#fretboard-wood)"/>

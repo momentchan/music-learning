@@ -378,12 +378,13 @@ A single miss is never presented as a lasting weakness.
   - The wood and fret wires are bounded by strings 1 and 6.
 - **Layouts:**
   - Vertical on phones: preserve the original cell proportions and use normal whole-page vertical scrolling to reach lower frets. Do not compress the neck to fit the screen or create a nested scroll area.
+  - **Lab phone layout override:** show all frets 1–12 together with the practice prompt above the bottom navigation, without scrolling. Adapt fret spacing to the available viewport height, keeping text and circular markers uniformly scaled. Recalculate after mode, feedback, viewport and browser toolbar changes. Guided session boards retain the layout above.
   - **Practice and recall modes MUST use the vertical layout on every screen size by default**, so the neck reads top-to-bottom like a chord chart. On wide screens a 直式/橫式 (vertical/horizontal) switch MAY change this, and the choice is remembered.
   - Explore mode MAY use the horizontal layout on tablet and desktop.
   - String order: in the vertical layout, low E is on the left (E A D G B e), matching chord diagrams (§7.2). In the horizontal layout, high e is on top, matching tablature.
   - Label strings with their numbers only. Do not display E/B/G/D/A/E above the nut as an answer hint.
   - A left-handed mirror option.
-- **Hit regions:** each (string, fret) cell is the hit target, about 44 × 44 CSS px where feasible. The mobile cell height MUST stay ≥ 40 px.
+- **Hit regions:** each (string, fret) cell is the hit target, about 44 × 44 CSS px where feasible. Guided mobile cells stay ≥ 40 px tall. The Lab's full-neck phone view uses shorter rows to fit twelve frets; each complete cell remains tappable, and the equivalent position form is available below the board.
 - **Focus mode:** on narrow screens, the learner MAY pick a **focus string set** (e.g. strings 6–4) or a **position window** (e.g. frets 5–8). This enlarges cells.
 - **Overlays:**
   - note names
