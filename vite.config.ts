@@ -19,7 +19,7 @@ export default defineConfig({
           { src: '/favicon.svg', sizes: 'any', type: 'image/svg+xml', purpose: 'any' },
         ],
       },
-      workbox: { globPatterns: ['**/*.{js,css,html,svg,png,ico,woff2,webmanifest}'], navigateFallback: '/index.html' },
+      workbox: { globPatterns: ['**/*.{js,css,html,svg,png,ico,woff2,webmanifest,mp3,json,md}'], navigateFallback: '/index.html' },
     }),
   ],
   test: { environment: 'node', include: ['src/**/*.test.ts'] },

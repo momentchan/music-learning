@@ -79,8 +79,8 @@ npm run build
 - Rhythm timing on phones is approximate even after calibration.
 - Only standard tuning is used in exercises.
 - The UI is zh-TW. The shared strings sit in a catalog (`src/i18n`), but some screen copy and the Lab tools are not yet translated.
-- The modeled-string synth is not a sampled guitar.
-- Audio and mobile behaviour still need manual checks on iOS Safari and Android Chrome.
+- Guitar and piano use 22 locally hosted recordings (about 1.44 MB total), loaded on demand and precached for offline use. Credits and CC BY 3.0 license: [public/audio/ATTRIBUTION.md](public/audio/ATTRIBUTION.md). Rebuild the pinned assets with `python scripts/prepare-samples.py` (requires ffmpeg). These compact banks use one dynamic layer and pitch interpolation, rather than separate recordings for every string and playing technique.
+- Audio and mobile behaviour still need manual checks on iOS Safari and Android Chrome. `npm run test:pwa` verifies the production service worker caches the recording banks and both instruments play after an offline reload.
 - The offline service worker only runs in production builds.
 
 ## Deployment

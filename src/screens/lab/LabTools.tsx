@@ -6,6 +6,7 @@ import { makeEarQuestion, type EarQuestion, type EarType } from '../../music/ear
 import { chooseReviewPosition, fretRegion, positionsForNote, reviewSummary, type ReviewPosition } from '../../music/fretboardQuiz'
 import { CHORD_INTERVALS, INTERVALS, SHARPS, STANDARD_TUNING, chordPitchClasses, chordVoicing, midiToFrequency, noteName, parseChord, planProgression, scaleNotes, type ChordStyle, type IntervalMode, type ProgressionChord, type ScaleName } from '../../music/theory'
 import { useAudioSettings } from '../../state/useAudioSettings'
+import { useAudioUi } from '../../stores/audioUi'
 
 /* Lab tools carried over from the original audio studio. They write practice through the LearningRepository (via data/db). */
 const EXAMPLES: { title: string; chords: string[] }[] = [
@@ -269,9 +270,10 @@ export function EarTraining({ run, stop }: { run: (fn: () => Promise<unknown>) =
 
 export function AudioSettingsPanel() {
   const { options, update } = useAudioSettings()
+  const { run, loading } = useAudioUi()
   return <><section className="card settings-card"><h3>聲音 Audio</h3><div className="setting"><div><strong>Audio enabled</strong><p>Allow sound during practice</p></div><input type="checkbox" checked={options.enabled} onChange={e => void update({ enabled: e.target.checked })} aria-label="Audio enabled"/></div><div className="setting"><div><strong>Silent mode</strong><p>Practice without sound while commuting</p></div><input type="checkbox" checked={options.silent} onChange={e => void update({ silent: e.target.checked })} aria-label="Silent mode"/></div>
-      <label>Instrument<select value={options.instrument} onChange={e => void update({ instrument: e.target.value as 'pluck' | 'keys' })}><option value="pluck">Clean guitar-style · modeled string</option><option value="keys">Clean keys · synthesized</option></select></label><p className="helper">Both sounds are generated locally. The guitar-style sound is a modeled string, not a recorded guitar sample. No network connection is required.</p>
+      <label>樂器音色<select value={options.instrument} onChange={e => void update({ instrument: e.target.value as 'pluck' | 'keys' })}><option value="pluck">木吉他 · 真實錄音</option><option value="keys">鋼琴 · 真實錄音</option></select></label><p className="helper">首次播放會載入所選樂器的錄音音色。完成網站的離線快取後，也能離線播放。<a href="/audio/ATTRIBUTION.md" target="_blank" rel="noreferrer">取樣來源與授權</a></p>
       <label>Master volume · {Math.round(options.volume * 100)}%<input type="range" min="0" max="1" step="0.01" value={options.volume} onChange={e => void update({ volume: Number(e.target.value) })}/></label><label>Playback tempo · {options.tempo} BPM<input type="range" min="50" max="180" value={options.tempo} onChange={e => void update({ tempo: Number(e.target.value) })}/></label><label>Note duration · {options.noteDuration.toFixed(2)} s<input type="range" min="0.15" max="1.2" step="0.05" value={options.noteDuration} onChange={e => void update({ noteDuration: Number(e.target.value) })}/></label><div className="setting"><div><strong>Metronome</strong><p>Click during progression playback</p></div><input type="checkbox" checked={options.metronome} onChange={e => void update({ metronome: e.target.checked })} aria-label="Metronome"/></div>
-      <button className="secondary-button" onClick={() => void audioEngine.activate()}>Activate audio</button><p className="helper">Mobile browsers require a tap before sound starts. Playback pauses when the app is backgrounded; tap again after an interruption.</p>
+      <button className="secondary-button" disabled={loading || options.silent || !options.enabled} onClick={() => void run(() => audioEngine.playChord('C', 'up'))}>{loading ? '正在載入音色…' : '試聽音色'}</button><p className="helper">Mobile browsers require a tap before sound starts. Playback pauses when the app is backgrounded; tap again after an interruption.</p>
     </section></>
 }

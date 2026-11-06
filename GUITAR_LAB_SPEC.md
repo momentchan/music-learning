@@ -704,7 +704,7 @@ Pure TypeScript, deterministic, with exhaustive tests.
 
 - **Reusable engine:** notes, intervals (melodic and harmonic), chords (block or strummed), arpeggios, progressions, metronome, count-in.
 - **Settings:** tempo, durations and mute.
-- **Sound:** the existing Tone.js engine (modeled-string pluck, keys and click) is kept. A small sampled nylon or steel-string set MAY be added if it measurably improves timbre and stays ≤ about 2 MB, precached.
+- **Sound:** Tone.js schedules locally hosted recorded acoustic-guitar and piano samples, with natural releases and overlapping arpeggio notes. Keep the compact banks together below about 2 MB and precache them for offline playback. Load and decode only the selected instrument on demand; report failures and allow retry. The metronome uses a lightweight synthesized click and does not wait for instrument samples. Credit recording creators and preserve sample licenses.
 - **Lifecycle:**
   - Start only after a user gesture.
   - Single-owner scheduling: starting new playback cancels the previous one, so sounds never pile up.
@@ -751,7 +751,7 @@ This is the state at commit `4c3061f`.
 | Ear training | `src/music/ear.ts`: 7 multiple-choice types | Keep. Wrap them in the exercise contract. Add review items |
 | A/B comparisons | `src/music/comparisons.ts` | Keep, inside Lab |
 | Persistence | `src/data/db.ts`: Dexie v3 with `attempts` and `settings`; mastery is the rolling last 10 per topic | **Migrate** to v4 (§10.2). Add `LearningRepository`, sessions and export/import |
-| Audio | `src/audio/AudioEngine.ts`: Tone.js pluck/keys/click, limiter, gesture start, cleanup on hide | Keep. Add count-in and cancellation ownership checks |
+| Audio | `src/audio/AudioEngine.ts`: sampled guitar/piano, synthesized click, limiter, gesture start, cleanup on hide | Cancel pending playback on Stop, mute, navigation or a newer request, including during sample loading |
 | Microphone, tuner, chord diagrams, rhythm pad, circle, lessons, Today, Progress | Missing | Build in the phases below |
 | Tests | 11 Vitest tests, 6 Playwright tests (desktop Chrome only) | Add mobile viewport projects and the suites in §15 |
 | Deploy | Git-connected Cloudflare Pages, `music-learning-52z.pages.dev`; PWA cache leaves out png files | Keep. Check deep-link reloads work (Pages SPA fallback when no `404.html` exists). Fix the precache patterns |

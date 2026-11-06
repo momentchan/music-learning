@@ -1,5 +1,4 @@
 import { useEffect } from 'react'
-import { audioEngine } from '../audio/AudioEngine'
 import { t } from '../i18n/zh-TW'
 import { GuitarScreen } from '../screens/GuitarScreen'
 import { LabScreen } from '../screens/lab/LabScreen'
@@ -41,7 +40,7 @@ export default function App() {
   }, [])
   // Stop sound and refresh derived data whenever the screen changes.
   useEffect(() => {
-    audioEngine.stop()
+    useAudioUi.getState().stop()
     useAudioUi.getState().clearError()
     const state = useLearning.getState()
     if (state.loaded && route.name !== 'session') void state.refresh()

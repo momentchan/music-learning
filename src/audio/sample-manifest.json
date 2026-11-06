@@ -1,0 +1,165 @@
+{
+  "source": "https://raw.githubusercontent.com/nbrosowsky/tonejs-instruments/622c2f1c32c8cfce4158ddc3eb26e518ddef37e5",
+  "revision": "622c2f1c32c8cfce4158ddc3eb26e518ddef37e5",
+  "license": "CC-BY-3.0",
+  "instruments": {
+    "pluck": [
+      {
+        "midi": 38,
+        "file": "guitar-acoustic/D2.mp3",
+        "bytes": 72768,
+        "sha256": "4f6f83ebb96a3b8e571fd158e0f1e8bb73d56654195a7f2e4bf65dfc53f83c9a",
+        "sourceSha256": "d005117a278f3b3ac5f6b7048f7d6d94315b85afa281140cc1a4264dd2f62483"
+      },
+      {
+        "midi": 40,
+        "file": "guitar-acoustic/E2.mp3",
+        "bytes": 72768,
+        "sha256": "51c502b9c439690604807ee530d65067ecb4f5b0048557593ec9541db24fae98",
+        "sourceSha256": "917820984d1bb0b7712b4f2c42a9694efbb2479ccede45aa78af73811fc6818d"
+      },
+      {
+        "midi": 43,
+        "file": "guitar-acoustic/G2.mp3",
+        "bytes": 72768,
+        "sha256": "827b83b5ef3d04b4b3e886d9b1583a7892d780cb7cc643dbd347ced210f2a5bc",
+        "sourceSha256": "9be6ff1387ec947afedb80244ae9321ca9606ce57c2671c3f50a07f6bdcd4f73"
+      },
+      {
+        "midi": 46,
+        "file": "guitar-acoustic/As2.mp3",
+        "bytes": 72768,
+        "sha256": "1cb0b6e4e83d347971ee1764bcedf50acd076b55e83db03f93df1cf1d041dda4",
+        "sourceSha256": "c18a73a24012b54144ce69e1671a2bae927b20c5f5f6963802b718f3b15fd7d4"
+      },
+      {
+        "midi": 49,
+        "file": "guitar-acoustic/Cs3.mp3",
+        "bytes": 72768,
+        "sha256": "7d227b83e89495f91d6f9e807fcf183a096e377ecb7ded45cb4107cdb8808f8c",
+        "sourceSha256": "fa6ba9fe6a9671166a6e64464c1697a567145aecc0c9e5dea4f0dbb07cc8bb50"
+      },
+      {
+        "midi": 52,
+        "file": "guitar-acoustic/E3.mp3",
+        "bytes": 72768,
+        "sha256": "b1b3d67bd5539cbc2bd6d8a999c043351324626b2e13490935cabb59909c195f",
+        "sourceSha256": "ffd6add4d02e0c9e45af59db231af77274b83602762878a9b1945210ae04bef5"
+      },
+      {
+        "midi": 55,
+        "file": "guitar-acoustic/G3.mp3",
+        "bytes": 69634,
+        "sha256": "c995bd3a39dfa09bdc268abfda2d290d87c0f274b882530cf0d3d78fab2413f3",
+        "sourceSha256": "8a8ddf06e2d4824f5086e6ad0cf32371da6afc594bf2efd9bb5ec9a2dfe9c040"
+      },
+      {
+        "midi": 58,
+        "file": "guitar-acoustic/As3.mp3",
+        "bytes": 53333,
+        "sha256": "3b58283f0c20fb55354c47328c97c0033f3aecc52cd10ea777d0d7b624bf7d11",
+        "sourceSha256": "fa417b5b5d84d7808dded5922dbd5222b67f6724a2a35b4b05cb1990a500c6c6"
+      },
+      {
+        "midi": 61,
+        "file": "guitar-acoustic/Cs4.mp3",
+        "bytes": 52393,
+        "sha256": "3899f251a3e077a63788d42914b4c08f4b0975336b204acc711ffc633513e166",
+        "sourceSha256": "220a4f2b31b1e5bd12cbbbc8d4e91d6e95d24ea62a5c3eabbd323c059c2aff7d"
+      },
+      {
+        "midi": 64,
+        "file": "guitar-acoustic/E4.mp3",
+        "bytes": 55528,
+        "sha256": "84627112e9b58656f6661b53cb470cc4620dae30b23d288d363115749af0c186",
+        "sourceSha256": "3b02f5448695ac92f257ea9e36ba77be1b1b4a08f62a549b95c7ea9f5303ce14"
+      },
+      {
+        "midi": 67,
+        "file": "guitar-acoustic/G4.mp3",
+        "bytes": 52079,
+        "sha256": "545632e3fc03501f4a03aa3f16d30f9351638d6e929d8616dd847b69909b5363",
+        "sourceSha256": "f26371971ba4e34431a709985b3d09ef74be441a6c49612e085f7f8eaf825ef4"
+      },
+      {
+        "midi": 70,
+        "file": "guitar-acoustic/As4.mp3",
+        "bytes": 49572,
+        "sha256": "a24258a95046ec9f7241baa205287f4d9df902c6d2fd9ca19bde8b9088f73ac8",
+        "sourceSha256": "ccd50d5271ac5b47b3bb422d10386d60a6ddaac6972085414eb2f1ab98137e23"
+      },
+      {
+        "midi": 74,
+        "file": "guitar-acoustic/D5.mp3",
+        "bytes": 39854,
+        "sha256": "a9578d99ff6b8f95eab697bc3de304f434fa8eda5ef7424c382872d28460e986",
+        "sourceSha256": "c9d74d19e672780b7b6e9eb4468b31b5fee6642f20df724198b232f7c78af4f1"
+      }
+    ],
+    "keys": [
+      {
+        "midi": 36,
+        "file": "piano/C2.mp3",
+        "bytes": 72768,
+        "sha256": "5a91689b52a97f8b529f72f9720a018ffee95826a871dfde6bdbecd24be47eb1",
+        "sourceSha256": "4fb4d2a432deb5355f62a29b87087f7f1cdd2ca4885016c53d3a65c71b637935"
+      },
+      {
+        "midi": 42,
+        "file": "piano/Fs2.mp3",
+        "bytes": 72768,
+        "sha256": "45ec6e4039ee0197bcadc58264a1ca929f75f53991a092263ba5f79b986fadf5",
+        "sourceSha256": "131eed911369b4a0bdc52addd38dec2abbeeaf68499991c1fc46aa4ec38ded6a"
+      },
+      {
+        "midi": 48,
+        "file": "piano/C3.mp3",
+        "bytes": 72768,
+        "sha256": "6505b30453dab78c8f6e135dbcab47819489238d4d3af2501cfdd2622bf3fc5d",
+        "sourceSha256": "277149247cbd666ce256689369e5f501bafdb68d027d866178b7944820f8ebc6"
+      },
+      {
+        "midi": 54,
+        "file": "piano/Fs3.mp3",
+        "bytes": 72768,
+        "sha256": "106623be42fe424ee3f6e4c52266981571610e9059398851631f46197f471002",
+        "sourceSha256": "d43f583706a2e6a1803e2360a79248b2f1aa9b3d1f8e5f04f5f9027d2b1afda7"
+      },
+      {
+        "midi": 60,
+        "file": "piano/C4.mp3",
+        "bytes": 72768,
+        "sha256": "514e646516f4816efe220bc552087f4cbe63760a5154523a42e03b892d274b9c",
+        "sourceSha256": "a265c8cfd4140cf27b55054b4953b6c691fce3523530ca8ae0faed5e4cd39063"
+      },
+      {
+        "midi": 66,
+        "file": "piano/Fs4.mp3",
+        "bytes": 72768,
+        "sha256": "cd006ab485100a71708ed35a7ca4c3e5bacef971403829825acc24ea169a89c2",
+        "sourceSha256": "0b23feb9c67e409aa18b7bd2b1897f198e5914121a709e4dfd9996af4f0a15b4"
+      },
+      {
+        "midi": 72,
+        "file": "piano/C5.mp3",
+        "bytes": 72768,
+        "sha256": "84e15f1ca180fd48517829a260e50886e60745cdb2606b3b23e876a21ba5409a",
+        "sourceSha256": "54a9304d2c609328580c0e06a394670559fe5f594f643d5d12c6dae158051b4a"
+      },
+      {
+        "midi": 78,
+        "file": "piano/Fs5.mp3",
+        "bytes": 72768,
+        "sha256": "d08d56b3fc42a2945583702b494e6da65031e8bae9b2a56f1d2477ace8eb55cd",
+        "sourceSha256": "2ed25faa160029fcd28071ffa98f9504588511b2cb2179f74d7da00284f1bc33"
+      },
+      {
+        "midi": 84,
+        "file": "piano/C6.mp3",
+        "bytes": 50826,
+        "sha256": "b54309b0b80984480d04c1fd296775c5d21a2df926c6e4c80cabe594737ce768",
+        "sourceSha256": "c3c9ee316e7b98a07d89be2340c2382aa689826b50db9080dab7f6e23ebc3d7c"
+      }
+    ]
+  }
+}
