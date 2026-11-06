@@ -179,13 +179,13 @@ export function SessionScreen({ sessionId }: { sessionId: string }) {
       <p className="eyebrow">拿起吉他 PLAY IT · 約 {node.bridge.minutes} 分鐘</p>
       <h2>{node.title}</h2>
       <p className="bridge-text">{node.bridge.text}</p>
-      <p className="helper">現在手邊有吉他嗎？做完後誠實評估一下（自我評估不會提高記憶熟練度，只會標記「彈過」）。</p>
+      <p className="helper">這段練習在手機上已經做完。沒有吉他就先排到稍後，回家再彈。自我評估只會標記「彈過」，不會提高記憶熟練度。</p>
+      <button type="button" className="primary-button wide" onClick={() => void bridge('later')}>先排到稍後，回家再彈</button>
       <div className="choice-grid three">
         <button type="button" onClick={() => void bridge(0)}>還不太行</button>
         <button type="button" onClick={() => void bridge(1)}>勉強可以</button>
         <button type="button" onClick={() => void bridge(2)}>很順</button>
       </div>
-      <button type="button" className="secondary-button wide" onClick={() => void bridge('later')}>沒帶吉他，稍後在「吉他」頁做</button>
     </article>}
 
     {item.kind === 'question' && <article className="card question-card">

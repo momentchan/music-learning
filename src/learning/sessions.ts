@@ -1,5 +1,5 @@
 /** Pure session planning (spec §3.1, §9.2). Questions are generated up front and stored, so resume replays them exactly. */
-import { nodeById } from '../curriculum/nodes'
+import { PATHWAYS, nodeById } from '../curriculum/nodes'
 import { templatesForItem, templatesForNode } from '../exercise-engine/registry'
 import type { Difficulty, ExerciseTemplate } from '../exercise-engine/types'
 import { createRng, deriveSeed, pick, shuffle } from '../lib/rng'
@@ -22,6 +22,27 @@ export function adaptiveDifficulty(mastery: NodeMastery | undefined, preference:
 }
 
 const usable = (t: ExerciseTemplate, audio: boolean) => audio || !t.requiresAudio
+
+/** Phone practice along Start Here. These nodes need no guitar. */
+const COMMUTE_NECK = ['fret.octaves', 'fret.naturals.all', 'fret.accidentals', 'interval.shapes']
+const COMMUTE_THEORY = ['scale.major', 'key.diatonic', 'harmony.basic']
+const COMMUTE_EAR = 'ear.basic'
+
+/** Lower is better. Producing a position or a spelling beats recognizing a choice. Rhythm taps stay out of the commute session. */
+function productionRank(template: ExerciseTemplate): number {
+  if (template.kind === 'rhythm') return 100
+  if (template.kind === 'fret-locate' || template.kind === 'construct') return 0
+  if (template.kind === 'fret-identify') return 1
+  if (template.evidenceLevel === 'recognize') return 3
+  return 2
+}
+
+function preferredTemplates(templates: ExerciseTemplate[]): ExerciseTemplate[] {
+  const pool = templates.filter(t => productionRank(t) < 100)
+  if (!pool.length) return []
+  const best = Math.min(...pool.map(productionRank))
+  return pool.filter(t => productionRank(t) === best)
+}
 
 function questionItem(template: ExerciseTemplate, seed: number, difficulty: Difficulty, reason: string, itemId?: string): PlannedItem {
   return { kind: 'question', question: template.generate(seed, { difficulty, itemId }), reason }
@@ -87,11 +108,13 @@ export interface GuidedOptions {
 }
 
 /**
- * Guided session recipe: warm-up (2 due) → due reviews (interleaved) → new or weak material → one apply item → bridge.
- * With nothing due, more time goes to new material.
+ * Commute session: due reviews, then phone work that does not need a guitar.
+ * On Start Here that is fretboard production, a few degree or numeral questions, and ear items when sound is on.
+ * The bridge task is queued for later; it is not something the learner has to play now.
  */
 export function buildGuidedSession(options: GuidedOptions): PlannedItem[] {
   const { minutes, seed, now, audio, reviews, mastery, preference } = options
+  const pathwayId = options.pathwayId ?? 'start'
   const total = questionsFor(minutes)
   const rng = createRng(seed)
   let n = 0
@@ -99,40 +122,53 @@ export function buildGuidedSession(options: GuidedOptions): PlannedItem[] {
   const difficultyFor = (nodeId: string) => adaptiveDifficulty(mastery.get(nodeId), preference)
 
   const due = rankDueItems(reviews.values(), now)
-    .map(r => ({ ...r, templates: templatesForItem(r.itemId).filter(t => usable(t, audio) && nodeById(t.nodeId)?.availability === 'available') }))
+    .map(r => ({ ...r, templates: preferredTemplates(templatesForItem(r.itemId).filter(t => usable(t, audio) && nodeById(t.nodeId)?.availability === 'available')) }))
     .filter(r => r.templates.length)
   const reviewBudget = Math.min(due.length, Math.ceil(total * 0.5))
   const reviewItems: PlannedItem[] = due.slice(0, reviewBudget).map(r => {
     const template = pick(rng, r.templates)
     return questionItem(template, nextSeed(), difficultyFor(template.nodeId), r.reason, r.itemId)
   })
-  const warmup = reviewItems.slice(0, 2)
-  const reviewRest = interleave(reviewItems.slice(2))
 
-  const plan: PlannedItem[] = [...warmup, ...reviewRest]
-  const nextNode = nextPathwayNode(options.pathwayId ?? 'start', mastery)
+  const plan: PlannedItem[] = [...reviewItems.slice(0, 2), ...interleave(reviewItems.slice(2))]
   const remaining = () => total - plan.filter(i => i.kind === 'question').length
-  if (nextNode && remaining() > 1) {
-    const isNew = (mastery.get(nextNode)?.state ?? 'new') === 'new'
-    if (isNew) plan.push({ kind: 'learn', nodeId: nextNode })
-    const templates = templatesForNode(nextNode).filter(t => usable(t, audio) && t.stage !== 'apply')
-    const budget = remaining() - 1
-    for (let i = 0; i < budget && templates.length; i++) {
-      const template = templates[i % templates.length]
-      plan.push(questionItem(template, nextSeed(), isNew ? 1 : difficultyFor(nextNode), isNew ? '新內容' : '繼續學習'))
+  const steps = PATHWAYS.find(p => p.id === pathwayId)?.steps ?? []
+  const stillOpen = (ids: readonly string[]) => ids.find(id => steps.includes(id) && nodeById(id)?.availability === 'available' && !['familiar', 'fluent'].includes(mastery.get(id)?.state ?? 'new'))
+  const focus = nextPathwayNode(pathwayId, mastery)
+  const neckNode = stillOpen(COMMUTE_NECK)
+  const theoryNode = stillOpen(COMMUTE_THEORY)
+
+  if (focus && (mastery.get(focus)?.state ?? 'new') === 'new') plan.push({ kind: 'learn', nodeId: focus })
+
+  const pushFrom = (nodeId: string | undefined, count: number, reason: string) => {
+    if (!nodeId || count <= 0) return 0
+    const templates = preferredTemplates(templatesForNode(nodeId).filter(t => usable(t, audio) && !t.requiresAudio))
+    if (!templates.length) return 0
+    const isNew = (mastery.get(nodeId)?.state ?? 'new') === 'new'
+    for (let i = 0; i < count; i++) plan.push(questionItem(templates[i % templates.length], nextSeed(), isNew ? 1 : difficultyFor(nodeId), reason))
+    return count
+  }
+
+  if (pathwayId === 'start' && (neckNode || theoryNode)) {
+    const focusIsTheory = focus ? COMMUTE_THEORY.includes(focus) : !neckNode
+    const mainNode = focusIsTheory ? theoryNode ?? focus : neckNode ?? focus
+    const sideNode = focusIsTheory ? neckNode : theoryNode
+    const room = remaining()
+    const earN = !audio || room < 1 ? 0 : Math.min(minutes >= 10 ? 4 : minutes >= 5 ? 2 : 1, room)
+    const sideN = sideNode && sideNode !== mainNode ? Math.min(minutes >= 10 ? 4 : minutes >= 5 ? 2 : 1, Math.max(0, room - earN)) : 0
+    const mainReason = (mastery.get(mainNode ?? '')?.state ?? 'new') === 'new' ? '新內容' : '繼續學習'
+    pushFrom(mainNode, Math.max(0, room - earN - sideN), mainReason)
+    pushFrom(sideNode, sideN, focusIsTheory ? '在指板上找' : '級數')
+    const earTemplates = templatesForNode(COMMUTE_EAR).filter(t => usable(t, audio))
+    for (let i = 0; i < earN && earTemplates.length && remaining() > 0; i++) {
+      plan.push(questionItem(earTemplates[i % earTemplates.length], nextSeed(), difficultyFor(COMMUTE_EAR), '聽'))
     }
+  } else if (focus) {
+    const isNew = (mastery.get(focus)?.state ?? 'new') === 'new'
+    pushFrom(focus, remaining(), isNew ? '新內容' : '繼續學習')
   }
-  // Apply: one context item from a node the learner has started (or the new node).
-  const started = [...mastery.values()].filter(m => m.state !== 'new').map(m => m.nodeId)
-  const applyTemplates = [...new Set([...started, ...(nextNode ? [nextNode] : [])])]
-    .flatMap(id => templatesForNode(id)).filter(t => t.stage === 'apply' && usable(t, audio))
-  while (remaining() > 0) {
-    const pool = applyTemplates.length ? applyTemplates : due.flatMap(d => d.templates)
-    if (!pool.length) break
-    const template = pick(rng, pool)
-    plan.push(questionItem(template, nextSeed(), difficultyFor(template.nodeId), '應用'))
-  }
-  const bridgeNode = nodeById(nextNode ?? '') ?? (started.length ? nodeById(started[0]) : undefined)
+
+  const bridgeNode = nodeById(focus ?? neckNode ?? theoryNode ?? '')
   if (bridgeNode?.bridge) plan.push({ kind: 'bridge', nodeId: bridgeNode.id, taskId: bridgeNode.bridge.id })
   return plan
 }

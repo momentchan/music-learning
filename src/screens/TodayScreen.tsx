@@ -40,12 +40,12 @@ export function TodayScreen() {
 
     <section className="card start-card">
       <p className="eyebrow">今日練習 TODAY</p>
-      <h2>{due.length ? `${due.length} 個項目到期複習` : learning.attempts.length ? '今天沒有到期的項目，學點新的吧' : '從零開始：空弦、和弦圖、第一個和弦'}</h2>
+      <h2>{due.length ? `${due.length} 個項目到期複習` : learning.attempts.length ? '今天沒有到期的項目，學點新的吧' : '從八度開始：把第 6、5 弦的音搬到其他弦'}</h2>
       <div className="minute-chips" role="radiogroup" aria-label="練習長度">
         {[3, 5, 10].map(m => <button key={m} role="radio" aria-checked={minutes === m} className={minutes === m ? 'active' : ''} onClick={() => setMinutes(m)}>{m} 分鐘</button>)}
       </div>
       <button className="primary-button wide big" disabled={starting} onClick={() => void start()}>▶ 開始 {minutes} 分鐘練習</button>
-      <p className="helper">流程：暖身 → 到期複習 → 新內容 → 應用 → 拿起吉他。隨時可以離開，下次接著做。</p>
+      <p className="helper">手機上就能做完：先在指板上點音，再拼幾題級數。開著聲音會加聽力。吉他的部分先排到稍後，回家再彈。隨時可以離開。</p>
       {error && <p className="notice" role="alert">{error}</p>}
     </section>
 
