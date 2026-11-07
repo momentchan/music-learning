@@ -8,7 +8,7 @@ import { ProgressScreen } from '../screens/ProgressScreen'
 import { SessionScreen } from '../screens/session/SessionScreen'
 import { SettingsScreen } from '../screens/SettingsScreen'
 import { TodayScreen } from '../screens/TodayScreen'
-import { useAudioSettings } from '../state/useAudioSettings'
+import { syncAudioSettings, useAudioSettings } from '../state/useAudioSettings'
 import { useAudioUi } from '../stores/audioUi'
 import { useLearning } from '../stores/learning'
 import { navigate, useRoute, type Route } from './router'
@@ -30,6 +30,7 @@ export default function App() {
   const audioUi = useAudioUi()
   const learning = useLearning()
 
+  useEffect(() => syncAudioSettings(), [])
   useEffect(() => { void loadAudio(); void useLearning.getState().load() }, [loadAudio])
   useEffect(() => {
     const stop = () => useAudioUi.getState().stop()

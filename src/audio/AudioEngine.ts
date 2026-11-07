@@ -9,7 +9,6 @@ export class AudioEngine {
   private samplers = new Map<Instrument, Tone.Sampler>()
   private sampleLoads = new Map<Instrument, { promise: Promise<Tone.Sampler>; controller: AbortController }>()
   private loadGeneration = 0
-  private click?: Tone.Synth
   private gain?: Tone.Gain
   private limiter?: Tone.Limiter
   private active = false
@@ -23,18 +22,17 @@ export class AudioEngine {
     if (!options.enabled || options.silent || instrumentChanged) this.stop()
   }
   get isReady() { return this.active && this.samplers.has(this.options.instrument) }
-  async activate(loadInstrument = true): Promise<boolean> {
+  async activate(): Promise<boolean> {
     if (!this.options.enabled || this.options.silent) return false
     const instrument = this.options.instrument
     await Tone.start() // caller must invoke from a user gesture
     if (!this.gain) {
       this.limiter = new Tone.Limiter(-2).toDestination()
       this.gain = new Tone.Gain(this.options.volume * 0.55).connect(this.limiter)
-      this.click = new Tone.Synth({ oscillator: { type: 'sine' }, envelope: { attack: 0.001, decay: 0.02, sustain: 0, release: 0.02 } }).connect(this.gain)
     }
     this.active = Tone.getContext().state === 'running'
-    if (this.active && loadInstrument) await this.loadSampler(instrument)
-    return this.audible() && (!loadInstrument || instrument === this.options.instrument)
+    if (this.active) await this.loadSampler(instrument)
+    return this.audible() && (instrument === this.options.instrument)
   }
   private loadSampler(instrument: Instrument): Promise<Tone.Sampler> {
     const sampler = this.samplers.get(instrument)
@@ -63,11 +61,11 @@ export class AudioEngine {
     return promise
   }
   /** Claim ownership before loading, so Stop, mute, navigation or a newer tap wins. */
-  private async beginPlayback(loadInstrument = true): Promise<number | null> {
+  private async beginPlayback(): Promise<number | null> {
     this.stop()
     const token = this.playbackToken
     try {
-      if (!await this.activate(loadInstrument) || token !== this.playbackToken) return null
+      if (!await this.activate() || token !== this.playbackToken) return null
     } catch (error) {
       if (token !== this.playbackToken) return null
       throw error
@@ -75,10 +73,10 @@ export class AudioEngine {
     return token
   }
   private audible() { return this.options.enabled && !this.options.silent && this.active }
-  private strike(notes: number[], duration: number, time: number) {
+  private strike(notes: number[], duration: number, time: number, velocity = 0.8) {
     if (!this.audible()) return
     const freqs = notes.map(midiToFrequency)
-    this.samplers.get(this.options.instrument)?.triggerAttackRelease(freqs, Math.max(0.06, duration), time, 0.8 / Math.sqrt(Math.max(1, notes.length)))
+    this.samplers.get(this.options.instrument)?.triggerAttackRelease(freqs, Math.max(0.06, duration), time, velocity / Math.sqrt(Math.max(1, notes.length)))
   }
   async playNote(midi: number) {
     if (await this.beginPlayback() === null) return
@@ -122,7 +120,7 @@ export class AudioEngine {
     if (config.metronome ?? this.options.metronome) {
       for (let beat = 0; beat * 60 / bpm < total - 0.001; beat++) {
         const at = beat * 60 / bpm
-        transport.schedule(time => { if (this.audible()) this.click!.triggerAttackRelease(beat % (config.timeSignature ?? 4) === 0 ? 880 : 660, 0.04, time, 0.2) }, at)
+        transport.schedule(time => { if (this.audible()) this.strike([beat % (config.timeSignature ?? 4) === 0 ? 76 : 72], 0.06, time, 0.25) }, at)
       }
     }
     if (!config.loop) transport.scheduleOnce(time => Tone.getDraw().schedule(() => {
@@ -152,12 +150,12 @@ export class AudioEngine {
    * Device output latency varies, so rhythm grading must also apply the learner's calibration offset.
    */
   async playClicks(count: number, bpm: number, accentEvery = 4): Promise<number | null> {
-    const token = await this.beginPlayback(false)
+    const token = await this.beginPlayback()
     if (token === null) return null
     const transport = Tone.getTransport()
     const beat = 60 / bpm
     for (let i = 0; i < count; i++) {
-      transport.schedule(time => { if (this.audible()) this.click!.triggerAttackRelease(i % accentEvery === 0 ? 1200 : 820, 0.03, time, 0.35) }, i * beat)
+      transport.schedule(time => { if (this.audible()) this.strike([i % accentEvery === 0 ? 76 : 72], 0.06, time, 0.35) }, i * beat)
     }
     transport.scheduleOnce(time => Tone.getDraw().schedule(() => { if (token === this.playbackToken) this.stop() }, time), count * beat + 0.1)
     const lead = 0.12
@@ -170,14 +168,14 @@ export class AudioEngine {
     this.playbackToken++
     const transport = Tone.getTransport()
     transport.stop(); transport.cancel(0); transport.loop = false
-    this.samplers.forEach(voice => voice.releaseAll()); this.click?.triggerRelease()
+    this.samplers.forEach(voice => voice.releaseAll())
   }
   dispose() {
     this.stop(); this.loadGeneration++
     this.sampleLoads.forEach(load => load.controller.abort()); this.sampleLoads.clear()
     this.samplers.forEach(voice => voice.dispose()); this.samplers.clear()
-    this.click?.dispose(); this.gain?.dispose(); this.limiter?.dispose()
-    this.click = undefined; this.gain = undefined; this.limiter = undefined; this.active = false
+    this.gain?.dispose(); this.limiter?.dispose()
+    this.gain = undefined; this.limiter = undefined; this.active = false
   }
 }
 

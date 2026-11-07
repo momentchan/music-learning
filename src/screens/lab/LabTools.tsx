@@ -184,10 +184,10 @@ export function EarTraining({ run, stop }: { run: (fn: () => Promise<unknown>) =
 }
 
 export function AudioSettingsPanel() {
-  const { options, update } = useAudioSettings()
+  const { options, update, loaded } = useAudioSettings()
   const { run, loading } = useAudioUi()
-  return <><section className="card settings-card"><h3>聲音</h3><div className="setting"><strong>播放聲音</strong><input type="checkbox" checked={options.enabled && !options.silent} onChange={e => void update({ enabled: e.target.checked, silent: !e.target.checked })} aria-label="播放聲音"/></div>
-      <label>樂器音色<select value={options.instrument} onChange={e => void update({ instrument: e.target.value as 'pluck' | 'keys' })}><option value="pluck">木吉他 · 真實錄音</option><option value="keys">鋼琴 · 真實錄音</option></select></label><p className="helper"><a href="/audio/ATTRIBUTION.md" target="_blank" rel="noreferrer">取樣來源與授權</a></p>
+  return <><section className="card settings-card"><h3>全站聲音</h3><div className="setting"><strong>播放聲音</strong><input type="checkbox" checked={options.enabled && !options.silent} onChange={e => void update({ enabled: e.target.checked, silent: !e.target.checked })} aria-label="播放聲音"/></div>
+      <label>樂器音色<select disabled={!loaded} value={options.instrument} onChange={e => void update({ instrument: e.target.value as 'pluck' | 'keys' })}><option value="pluck">木吉他 · 真實錄音</option><option value="keys">鋼琴 · 真實錄音</option></select></label><p className="helper"><a href="/audio/ATTRIBUTION.md" target="_blank" rel="noreferrer">取樣來源與授權</a></p>
       <label>Master volume · {Math.round(options.volume * 100)}%<input type="range" min="0" max="1" step="0.01" value={options.volume} onChange={e => void update({ volume: Number(e.target.value) })}/></label><label>Playback tempo · {options.tempo} BPM<input type="range" min="50" max="180" value={options.tempo} onChange={e => void update({ tempo: Number(e.target.value) })}/></label><label>Note duration · {options.noteDuration.toFixed(2)} s<input type="range" min="0.15" max="1.2" step="0.05" value={options.noteDuration} onChange={e => void update({ noteDuration: Number(e.target.value) })}/></label><div className="setting"><div><strong>Metronome</strong><p>Click during progression playback</p></div><input type="checkbox" checked={options.metronome} onChange={e => void update({ metronome: e.target.checked })} aria-label="Metronome"/></div>
       <button className="secondary-button" disabled={loading || options.silent || !options.enabled} onClick={() => void run(() => audioEngine.playChord('C', 'up'))}>{loading ? '正在載入音色…' : '試聽音色'}</button>
     </section></>

@@ -32,6 +32,12 @@ The old `/guitar` link opens the same practice hub in guitar mode; `/lab/ear` re
 
 Microphone input now shows an independent volume meter and detected note. Starting guitar practice automatically uses microphone input for supported questions; there is no second input-method menu. The first note after starting practice can be graded without first waiting for silence. Between answers, release the previous note before replaying. Quiet-input detection was lowered from RMS 0.02 to 0.0015, while periodicity confidence and pitch stability still guard grading. Permission errors and low input levels are visible, with restart and device selection when multiple actual microphones exist. These changes are tested with quiet synthetic streams; real built-in microphone performance still requires the user to play and check the meter.
 
+## One global playback instrument
+
+Settings → **全站聲音 → 樂器音色** controls every generated sound: fretboard notes/replay, question and answer examples, correct-note confirmation, chord/interval/scale tools, progressions, comparisons, ear exercises, metronome and count-in/calibration cues. Selecting guitar uses the recorded acoustic-guitar bank throughout; selecting piano uses the recorded piano bank throughout. Beat accents use short notes from that same bank rather than a separate synthesized click.
+
+The setting updates the shared engine immediately, saves changes in order, synchronizes other open tabs and refreshes when returning to the app. A delayed read of older saved settings cannot undo a more recent choice. Microphone input is still live input; it is not echoed or transformed into the selected playback instrument.
+
 ## Progressive finding and complete intervals
 
 Microphone finding uses one fitted 0–12 fret reference neck on phones and computers, without fret-window buttons, a miniature map, or view switching. This keeps all possible positions visible while both hands hold the guitar. Portrait reference labels are enlarged for reading. Local windows remain for touch answers and return if the learner switches to tapping.

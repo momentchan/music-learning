@@ -729,7 +729,7 @@ Pure TypeScript, deterministic, with exhaustive tests.
 
 - **Reusable engine:** notes, intervals (melodic and harmonic), chords (block or strummed), arpeggios, progressions, metronome, count-in.
 - **Settings:** tempo, durations and mute.
-- **Sound:** Tone.js schedules locally hosted recorded acoustic-guitar and piano samples, with natural releases and overlapping arpeggio notes. Keep the compact banks together below about 2 MB and precache them for offline playback. Load and decode only the selected instrument on demand; report failures and allow retry. The metronome uses a lightweight synthesized click and does not wait for instrument samples. Credit recording creators and preserve sample licenses.
+- **Sound:** Tone.js schedules locally hosted recorded acoustic-guitar and piano samples, with natural releases and overlapping arpeggio notes. Keep the compact banks together below about 2 MB and precache them for offline playback. Load and decode only the selected instrument on demand; report failures and allow retry. One global instrument selection governs every playback path, including metronome/count-in cues, which now use short accented notes from the selected sample bank. Instrument changes synchronize open tabs; pending older reads must not override a newer choice. Credit recording creators and preserve sample licenses.
 - **Lifecycle:**
   - Start only after a user gesture.
   - Single-owner scheduling: starting new playback cancels the previous one, so sounds never pile up.

@@ -85,11 +85,12 @@ describe('sample playback ownership', () => {
     expect(audio.strike).toHaveBeenCalledOnce()
   })
 
-  it('plays the metronome without downloading instrument recordings', async () => {
+  it('plays metronome accents through the selected instrument instead of a separate synth', async () => {
     expect(await engine.playClicks(4, 120)).toBeTypeOf('number')
-    expect(audio.load).not.toHaveBeenCalled()
+    expect(audio.load).toHaveBeenCalledWith('pluck', expect.any(Function), expect.any(AbortSignal))
     for (const event of [...audio.events]) event.callback(event.at)
-    expect(audio.click).toHaveBeenCalledTimes(4)
+    expect(audio.strike).toHaveBeenCalledTimes(4)
+    expect(audio.click).not.toHaveBeenCalled()
   })
 
   it('lets arpeggio strings overlap, while harmonic intervals start together', async () => {
