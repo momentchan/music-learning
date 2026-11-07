@@ -61,7 +61,7 @@ export function QuestionView({ question, grade, response, onSubmit, inputMode, h
   if (question.kind === 'fret-identify') {
     const marks: FretMark[] = [{ string: question.string, fret: question.fret, label: answered ? displayNote(['C', 'C#', 'D', 'Eb', 'E', 'F', 'F#', 'G', 'Ab', 'A', 'Bb', 'B'][question.answerPc]) : '?', tone: answered ? (grade!.result === 'correct' ? 'correct' : 'target') : 'target' }]
     return <div className="question">
-      <h2 className="question-prompt">{question.prompt}</h2>
+      <h2 className="question-prompt">這是什麼音？</h2>
       <div className="question-visual board"><PracticeBoard focusFret={question.fret} highlightedString={question.string} leftHanded={leftHanded} tuning={question.tuning} marks={marks} label={`指板，題目位置：第 ${question.string} 弦 ${question.fret === 0 ? '空弦' : `第 ${question.fret} 格`}`}/></div>
       <PitchPicker disabled={answered} onPick={value => onSubmit({ kind: 'fret-identify', value })}/>
       {answered && response?.kind === 'fret-identify' && <p className="helper">你的答案：{displayNote(response.value)}</p>}
