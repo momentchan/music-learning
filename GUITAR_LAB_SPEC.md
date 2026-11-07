@@ -17,7 +17,7 @@ The current shipped practice contract is documented in [PRACTICE_IMPLEMENTATION.
 - Continuous practice remains available. Played answers automatically retry after a miss and advance after success, using one continuous input stream. Tap answers keep their own manual/automatic advance setting. Practice starts microphone input automatically (with browser permission when needed); pause, backgrounding and exit release it, and resume restarts it.
 - Schema/backup v5 supports v4 data without deleting history. Manual cross-device merge preserves completions, deduplicates attempts and keeps device latency local. There is no automatic cloud sync.
 - Pitch reference, metronome and one-minute chord-change self-assessment are available. Real-instrument detection accuracy and mobile microphone compatibility remain unverified; advanced sequence/polyphonic detection remains future work.
-- PWA readiness and a deferred, user-triggered update replace automatic updating during practice.
+- PWA updates download in the background and apply automatically on home or after a saved session completes. Active practice, editing screens and unsaved attempts defer reload, including updates activated by another tab. Normal use has no version-update controls.
 
 ### Navigation simplification — current behavior
 

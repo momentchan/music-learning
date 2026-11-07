@@ -61,7 +61,7 @@ export default function App() {
       </div>
     </header>
     <main className="content">
-      <OfflineStatus inSession={inSession}/>
+      <OfflineStatus canUpdate={learning.loaded && learning.unsaved.length === 0 && (route.name === 'today' || route.name === 'guitar' || (inSession && !learning.activeSession))}/>
       {title && <div className="page-heading"><h1>{title}</h1></div>}
       {(audioUi.error || settingsError) && <div className="notice" role="alert">{audioUi.error || settingsError}</div>}
       {learning.error && <div className="notice" role="alert">{learning.error}</div>}

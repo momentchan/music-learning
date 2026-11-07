@@ -119,7 +119,7 @@ Implementation notes and remaining manual checks: [PRACTICE_IMPLEMENTATION.md](P
 - The UI is zh-TW. The shared strings sit in a catalog (`src/i18n`), but some screen copy and the Lab tools are not yet translated.
 - Guitar and piano use 22 locally hosted recordings (about 1.44 MB total), loaded on demand and precached for offline use. Credits and CC BY 3.0 license: [public/audio/ATTRIBUTION.md](public/audio/ATTRIBUTION.md). Rebuild the pinned assets with `python scripts/prepare-samples.py` (requires ffmpeg). These compact banks use one dynamic layer and pitch interpolation, rather than separate recordings for every string and playing technique.
 - Audio and mobile behaviour still need manual checks on iOS Safari and Android Chrome. `npm run test:pwa` verifies the production service worker caches the recording banks and both instruments play after an offline reload.
-- The offline service worker only runs in production builds. Offline readiness is displayed; updates wait for user action outside practice instead of reloading an active session.
+- The offline service worker only runs in production builds. Only offline status is displayed. Updates are checked at launch, on returning to the app/online, and once a minute while visible. A downloaded update activates automatically on the practice home or after a saved session completes. Active practice, other editing pages, and unsaved attempts defer reload; updates activated by another tab also wait for a safe point. There is no update button. Clients still running the previous manual-update code must apply this migration once to receive the automatic policy.
 
 ## Deployment
 

@@ -7,6 +7,7 @@ export default defineConfig({
   plugins: [
     react(), tailwindcss(),
     VitePWA({
+      // The app activates updates automatically at safe boundaries, not during practice.
       registerType: 'prompt',
       includeAssets: ['favicon.svg'],
       manifest: {
