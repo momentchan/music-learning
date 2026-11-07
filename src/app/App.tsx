@@ -1,4 +1,5 @@
 import { useEffect } from 'react'
+import { OfflineStatus } from '../components/OfflineStatus'
 import { t } from '../i18n/zh-TW'
 import { GuitarScreen } from '../screens/GuitarScreen'
 import { LabScreen } from '../screens/lab/LabScreen'
@@ -22,7 +23,7 @@ const NAV = [
 
 const navFor = (route: Route) => route.name === 'node' ? 'learn' : route.name === 'today' || route.name === 'session' ? 'today' : route.name
 
-const TITLES: Partial<Record<Route['name'], string>> = { learn: '學習地圖', lab: '工具', guitar: '吉他', progress: '進度', settings: '設定' }
+const TITLES: Partial<Record<Route['name'], string>> = { learn: '學習地圖', lab: '工具', guitar: '持琴練習', progress: '進度', settings: '設定' }
 
 export default function App() {
   const route = useRoute()
@@ -60,6 +61,7 @@ export default function App() {
       </div>
     </header>
     <main className="content">
+      <OfflineStatus inSession={inSession}/>
       {title && <div className="page-heading"><h1>{title}</h1></div>}
       {(audioUi.error || settingsError) && <div className="notice" role="alert">{audioUi.error || settingsError}</div>}
       {learning.error && <div className="notice" role="alert">{learning.error}</div>}

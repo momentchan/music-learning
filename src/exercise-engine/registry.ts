@@ -1,9 +1,11 @@
+import { chordTones, positionWindow } from './templates/applied'
 import { fretAccidentals, fretNaturalsAll, fretNaturalsLow, fretOctaves, fretOpen, intervalShapes } from './templates/fretboard'
 import { chordDiagram, chordOpen, earBasic, rhythmPulse, rhythmStrum } from './templates/practical'
 import { harmonyBasic, intervalBasics, keyDiatonic, scaleMajor, triadBasic } from './templates/theory'
 import type { Difficulty, ExerciseTemplate, Question } from './types'
 
 export const TEMPLATES: readonly ExerciseTemplate[] = [
+  chordTones, positionWindow,
   ...fretOpen, ...fretNaturalsLow, ...fretNaturalsAll, ...fretAccidentals, ...fretOctaves, ...intervalShapes,
   ...intervalBasics, ...triadBasic, ...scaleMajor, ...keyDiatonic, ...harmonyBasic,
   ...chordDiagram, ...chordOpen, ...rhythmPulse, ...rhythmStrum, ...earBasic,
@@ -36,4 +38,9 @@ export function templatesForItem(itemId: string): ExerciseTemplate[] {
 
 export function generate(templateId: string, seed: number, difficulty: Difficulty, itemId?: string): Question {
   return templateById(templateId).generate(seed, { difficulty, itemId })
+}
+
+
+export function supportedInputs(template: ExerciseTemplate): readonly ('tap' | 'keyboard' | 'microphone')[] {
+  return template.supportedInputs ?? (template.kind === 'fret-locate' ? ['tap', 'keyboard', 'microphone'] : ['tap', 'keyboard'])
 }

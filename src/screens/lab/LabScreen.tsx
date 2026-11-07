@@ -1,3 +1,4 @@
+import { useLearning } from '../../stores/learning'
 import { useState } from 'react'
 import { navigate } from '../../app/router'
 import { ChordDiagram } from '../../components/diagram/ChordDiagram'
@@ -27,6 +28,7 @@ export function LabScreen({ tool }: { tool: string }) {
 }
 
 function ChordLibrary() {
+  const leftHanded = useLearning(s => s.preferences.leftHanded)
   const [family, setFamily] = useState<'open' | 'open7' | 'other'>('open')
   const shapes = CHORD_SHAPES.filter(s => family === 'open' ? s.family === 'open' : family === 'open7' ? s.family === 'open7' : !['open', 'open7'].includes(s.family))
   return <section className="card">
@@ -35,6 +37,6 @@ function ChordLibrary() {
     <div className="pathway-chips" role="group" aria-label="和弦類別">
       {([['open', '開放三和弦'], ['open7', '屬七和弦'], ['other', '七和弦與封閉']] as const).map(([id, label]) => <button key={id} aria-pressed={family === id} className={family === id ? 'active' : ''} onClick={() => setFamily(id)}>{label}</button>)}
     </div>
-    <div className="shape-grid">{shapes.map(s => <ChordDiagram key={s.id} shape={s} size={130}/>)}</div>
+    <div className="shape-grid">{shapes.map(s => <ChordDiagram leftHanded={leftHanded} key={s.id} shape={s} size={130}/>)}</div>
   </section>
 }

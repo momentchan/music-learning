@@ -55,6 +55,7 @@ export interface FretIdentifyQuestion extends QuestionBase {
 }
 
 export interface FretLocateQuestion extends QuestionBase {
+  allowedPositions?: { string: number; fret: number }[]
   kind: 'fret-locate'
   tuning: number[]
   targetPc: number
@@ -93,13 +94,15 @@ export interface RhythmQuestion extends QuestionBase {
 export type Question = ChoiceQuestion | FretIdentifyQuestion | FretLocateQuestion | ConstructQuestion | RhythmQuestion
 
 export type Response =
+  | { kind: 'played-note'; midi: number; hz?: number; cents?: number; confidence?: number }
   | { kind: 'choice'; value: string }
   | { kind: 'fret-identify'; value: string }
-  | { kind: 'fret-locate'; string: number; fret: number }
+  | { kind: 'fret-locate'; string: number; fret: number; inputMethod?: 'tap' | 'keyboard' }
   | { kind: 'construct'; notes: string[] }
   | { kind: 'rhythm'; taps: { t: number; stroke: Stroke }[]; offsetMs: number }
 
 export interface Grade {
+  verificationScope?: 'pitchClass' | 'exactPitch' | 'screenPosition' | 'noteNaming'
   result: ResultKind
   /** Per review item: was it demonstrated correctly? */
   itemResults: Record<string, boolean>
@@ -115,6 +118,7 @@ export interface Grade {
 export interface GenerateOptions { difficulty: Difficulty; itemId?: string }
 
 export interface ExerciseTemplate {
+  supportedInputs?: readonly ('tap' | 'keyboard' | 'microphone')[]
   id: string
   nodeId: string
   kind: Question['kind']

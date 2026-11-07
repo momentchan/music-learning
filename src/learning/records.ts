@@ -2,9 +2,12 @@
 import type { EvidenceLevel, Question, ResultKind } from '../exercise-engine/types'
 import type { ReviewState } from './scheduler'
 
-export const RECORD_SCHEMA_VERSION = 4
+export const RECORD_SCHEMA_VERSION = 5
 
 export interface ExerciseAttempt {
+  inputMethod?: 'tap' | 'keyboard' | 'microphone' | 'legacy'
+  practiceContext?: 'pocket' | 'instrument'
+  verificationScope?: 'pitchClass' | 'exactPitch' | 'screenPosition' | 'noteNaming' | 'unknown'
   id: string
   sessionId: string
   /** Template kind for new attempts; legacy attempts keep their original type (e.g. "fretboard.find-note"). */
@@ -51,7 +54,7 @@ export interface ItemOutcome { index: number; attemptId?: string; result?: Resul
 export interface PracticeSession {
   id: string
   mode: 'guided' | 'lesson' | 'free' | 'legacy' | 'lab'
-  settings: { minutes?: number; nodeId?: string; templateIds?: string[]; difficulty?: number; audio?: boolean }
+  settings: { minutes?: number; nodeId?: string; templateIds?: string[]; difficulty?: number; audio?: boolean; practiceContext?: 'pocket' | 'instrument'; answerInput?: 'tap' | 'play'; practiceFocus?: PracticeFocus }
   plannedItems: PlannedItem[]
   /** Index of the next unanswered item. */
   cursor: number
@@ -84,7 +87,12 @@ export interface SavedProgression { id: string; name: string; key: string; chord
 
 export interface PathwayProgress { pathwayId: string; completedNodeIds: string[]; updatedAt: number }
 
+export type PracticeFocus = 'notes' | 'naming' | 'positions' | 'intervals' | 'chord-tones'
+
 export interface Preferences {
+  practiceFocus: PracticeFocus
+  practiceContext: 'pocket' | 'instrument'
+  advancePolicy: 'auto' | 'manual'
   weeklyGoalDays: number
   difficulty: 'auto' | 1 | 2 | 3
   practiceLayout: 'vertical' | 'horizontal'
@@ -92,13 +100,16 @@ export interface Preferences {
   tuning: 'standard'
   noteNaming: 'sharps-and-flats'
   leftHanded: boolean
+  /** How every later question is answered. Tap is the default. */
+  answerInput: 'tap' | 'play'
   theme: 'dark'
   language: 'zh-TW'
 }
 
 export const DEFAULT_PREFERENCES: Preferences = {
+  practiceContext: 'pocket', advancePolicy: 'auto', practiceFocus: 'notes',
   weeklyGoalDays: 4, difficulty: 'auto', practiceLayout: 'vertical', latencyOffsetMs: null,
-  tuning: 'standard', noteNaming: 'sharps-and-flats', leftHanded: false, theme: 'dark', language: 'zh-TW',
+  tuning: 'standard', noteNaming: 'sharps-and-flats', leftHanded: false, answerInput: 'tap', theme: 'dark', language: 'zh-TW',
 }
 
 export type { ReviewState }

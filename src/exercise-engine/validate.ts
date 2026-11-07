@@ -1,5 +1,6 @@
 import { displayNote, mod12, noteLabel, octaveOf, parseNote, pitchClass, PC_SHARP, sameSpelling, type SpelledNote } from '../music-theory/notes'
 import type { ChoiceQuestion, ConstructQuestion, FretIdentifyQuestion, FretLocateQuestion, Grade, Question, Response, RhythmQuestion } from './types'
+import { validatePlayedNote } from './playedAnswer'
 
 const all = (q: Question, ok: boolean) => Object.fromEntries(q.reviewItemIds.map(id => [id, ok]))
 const pcName = (pc: number) => {
@@ -11,6 +12,11 @@ const midiOn = (tuning: number[], string: number, fret: number) => tuning[6 - st
 const positionText = (string: number, fret: number) => fret === 0 ? `第 ${string} 弦空弦` : `第 ${string} 弦第 ${fret} 格`
 
 export function validate(question: Question, response: Response): Grade {
+  if (response.kind === 'played-note') {
+    if (question.kind !== 'fret-locate') throw new Error('這題需要音名或文字作答，不能用音高代替。')
+    if (!Number.isInteger(response.midi) || response.midi < 40 || response.midi > 88) throw new Error('音高不在可用的吉他音域。')
+    return validatePlayedNote(question, response)
+  }
   if (question.kind !== response.kind) throw new Error(`Response kind ${response.kind} does not match ${question.kind}`)
   switch (question.kind) {
     case 'choice': return validateChoice(question, response as Extract<Response, { kind: 'choice' }>)
@@ -55,6 +61,7 @@ export function locateTargets(q: FretLocateQuestion): { string: number; fret: nu
   for (let string = 1; string <= 6; string++) {
     if (q.string !== undefined && q.string !== string) continue
     for (let fret = q.minFret; fret <= q.maxFret; fret++) {
+      if (q.allowedPositions && !q.allowedPositions.some(p => p.string === string && p.fret === fret)) continue
       const midi = midiOn(q.tuning, string, fret)
       if (q.targetMidi !== undefined ? midi === q.targetMidi : mod12(midi) === q.targetPc) result.push({ string, fret })
     }

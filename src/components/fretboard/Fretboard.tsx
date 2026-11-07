@@ -1,154 +1,91 @@
-import { useMemo, useRef, type CSSProperties, type KeyboardEvent } from 'react'
+import { useRef, useState, type KeyboardEvent, type PointerEvent } from 'react'
 import { PC_SHARP, displayNote } from '../../music-theory/notes'
+import { nextPosition, stringOrder, type BoardOrientation } from './projection'
 
-/** Shared SVG fretboard (spec §7.1). Renders and reports taps; it never computes music theory. */
 export type MarkTone = 'root' | 'target' | 'selected' | 'correct' | 'wrong' | 'reference' | 'neutral'
 export interface FretMark { string: number; fret: number; label?: string; tone: MarkTone }
-
 export interface FretboardProps {
-  tuning: readonly number[]
-  minFret?: number
-  maxFret?: number
-  orientation: 'vertical' | 'horizontal' | 'playing'
-  marks?: FretMark[]
-  showNoteNames?: boolean
-  onSelect?: (string: number, fret: number) => void
-  disabled?: boolean
-  label: string
-  leftHanded?: boolean
+  tuning: readonly number[]; minFret?: number; maxFret?: number; orientation: BoardOrientation
+  marks?: FretMark[]; showNoteNames?: boolean; onSelect?: (string: number, fret: number, inputMethod?: 'tap' | 'keyboard') => void
+  fitHeight?: number; cellLabel?: (string: number, fret: number) => string; selectableRange?: readonly [number, number]; disabled?: boolean; label: string; leftHanded?: boolean
 }
-
-const STRINGS = [6, 5, 4, 3, 2, 1]
-const noteAt = (tuning: readonly number[], string: number, fret: number) => tuning[6 - string] + fret
-const pcName = (midi: number) => displayNote(PC_SHARP[midi % 12])
 export const positionLabel = (string: number, fret: number) => `第 ${string} 弦 ${fret === 0 ? '空弦' : `第 ${fret} 格`}`
+const COLORS: Record<MarkTone, string> = { root: '#e9ae6a', reference: '#e9ae6a', target: '#397191', selected: '#d16f55', correct: '#287a58', wrong: '#9c443d', neutral: '#334351' }
+const LABELS: Record<MarkTone, string> = { root: '根音', reference: '參考', target: '目標', selected: '選取', correct: '正確', wrong: '錯誤', neutral: '標示' }
 
-const TONE_STYLE: Record<MarkTone, { fill: string; stroke: string; text: string; shape: 'circle' | 'square' | 'diamond' }> = {
-  root: { fill: '#e9ae6a', stroke: '#ffe0b5', text: '#1b1611', shape: 'square' },
-  target: { fill: '#3d6f8f', stroke: '#a8d8f5', text: '#f2f8fb', shape: 'circle' },
-  selected: { fill: '#ee765e', stroke: '#ffd5a5', text: '#1d1210', shape: 'circle' },
-  correct: { fill: '#3b9a70', stroke: '#b6efcf', text: '#f2fff8', shape: 'circle' },
-  wrong: { fill: '#bb594e', stroke: '#ffd4c9', text: '#fff4f1', shape: 'diamond' },
-  reference: { fill: '#e9ae6a', stroke: '#ffe0b5', text: '#1b1611', shape: 'square' },
-  neutral: { fill: '#2b333d', stroke: '#b6a994', text: '#e8e2d6', shape: 'circle' },
-}
-
-export function Fretboard({ tuning, minFret = 0, maxFret = 12, orientation, marks = [], showNoteNames = false, onSelect, disabled, label, leftHanded }: FretboardProps) {
-  const frets = useMemo(() => Array.from({ length: maxFret - minFret + 1 }, (_, i) => minFret + i), [minFret, maxFret])
-  const hasOpen = minFret === 0
-  const playable = frets.filter(f => f > 0)
-  const svgRef = useRef<SVGSVGElement>(null)
-
-  // ---- Geometry (viewBox units) ----
-  const playing = orientation === 'playing'
+/** Shared projection for course, explorer, feedback and progress. Music coordinates never mirror. */
+export function Fretboard({ tuning, minFret = 0, maxFret = 12, orientation, marks = [], showNoteNames = false, onSelect, disabled, label, leftHanded = false, selectableRange, fitHeight, cellLabel }: FretboardProps) {
+  const ref = useRef<SVGSVGElement>(null)
+  const gesture = useRef<{ x: number; y: number; moved: boolean } | null>(null)
+  const [focus, setFocus] = useState({ string: 6, fret: minFret })
   const vertical = orientation === 'vertical'
-  const VW = 290
-  const CELL = 46
-  const geometry = useMemo(() => {
-    if (vertical) {
-      const top = 26
-      const openH = hasOpen ? 38 : 0
-      const nutY = top + openH
-      // Fixed geometry scales uniformly with width; short screens scroll the page.
-      const weights = playable.map((_, i) => Math.max(40, 54 * Math.pow(2, -i / 12)))
-      const wires = [nutY]
-      weights.forEach(w => wires.push(wires[wires.length - 1] + w))
-      const height = wires[wires.length - 1] + 12
-      const x = (string: number) => {
-        const col = leftHanded ? string - 1 : 6 - string
-        return 36 + col * CELL
-      }
-      const cell = (string: number, fret: number) => {
-        const cx = x(string)
-        if (fret === 0) return { cx, cy: top + openH / 2, rect: { x: cx - CELL / 2, y: top, width: CELL, height: openH - 2 } }
-        const i = fret - Math.max(1, minFret)
-        return { cx, cy: (wires[i] + wires[i + 1]) / 2, rect: { x: cx - CELL / 2, y: wires[i], width: CELL, height: wires[i + 1] - wires[i] } }
-      }
-      return { kind: 'v' as const, w: VW, h: height, wires, x, cell, nutY, top }
-    }
-    const left = hasOpen ? (playing ? 64 : 46) : 14
-    const wires = [left]
-    playable.forEach((_, i) => wires.push(wires[wires.length - 1] + 78 * Math.pow(2, -i / 12)))
-    const w = wires[wires.length - 1] + 18
-    // Playing position: low E toward the ceiling, nut to the left, as on a guitar in your hands.
-    const y = (string: number) => 30 + (playing ? 6 - string : leftHanded ? 6 - string : string - 1) * 40
-    const cell = (string: number, fret: number) => {
-      const cy = y(string)
-      if (fret === 0) return { cx: left / 2 + 4, cy, rect: { x: 4, y: cy - 20, width: left - 8, height: 40 } }
-      const i = fret - Math.max(1, minFret)
-      return { cx: (wires[i] + wires[i + 1]) / 2, cy, rect: { x: wires[i], y: cy - 20, width: wires[i + 1] - wires[i], height: 40 } }
-    }
-    return { kind: 'h' as const, w, h: 272, wires, y, cell, nutX: left }
-  }, [vertical, playing, hasOpen, playable, minFret, leftHanded])
-
-  function focusCell(string: number, fret: number) {
-    svgRef.current?.querySelector<SVGGElement>(`[data-cell="${string}-${fret}"]`)?.focus()
+  const order = stringOrder(orientation, leftHanded)
+  const frets = Array.from({ length: maxFret - minFret + 1 }, (_, i) => i + minFret)
+  const margin = 40, step = vertical && fitHeight ? Math.max(12, (fitHeight - margin - 8) / frets.length) : 64, stringStep = 52
+  const wires = [margin]
+  for (const fret of frets) {
+    const distance = orientation === 'playing' && frets.length > 5 && fret > 0 ? Math.max(44, 90 * 2 ** (-(fret - 1) / 12)) : step
+    wires.push(wires[wires.length - 1] + distance)
   }
-  function onKey(e: KeyboardEvent, string: number, fret: number) {
-    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); if (!disabled) onSelect?.(string, fret); return }
-    const stringStep = vertical ? (e.key === 'ArrowLeft' ? 1 : e.key === 'ArrowRight' ? -1 : 0) : (e.key === 'ArrowUp' ? -1 : e.key === 'ArrowDown' ? 1 : 0)
-    const fretStep = vertical ? (e.key === 'ArrowUp' ? -1 : e.key === 'ArrowDown' ? 1 : 0) : ((e.key === 'ArrowLeft' ? -1 : e.key === 'ArrowRight' ? 1 : 0) * (playing && leftHanded ? -1 : 1))
-    if (!stringStep && !fretStep) return
-    e.preventDefault()
-    const s = Math.min(6, Math.max(1, string + (leftHanded && vertical ? -stringStep : stringStep)))
-    const f = Math.min(maxFret, Math.max(minFret, fret + fretStep))
-    focusCell(s, f)
+  const width = vertical ? 340 : wires[wires.length - 1] + 8
+  const height = vertical ? wires[wires.length - 1] + 8 : 342
+  const mirror = !vertical && orientation === 'playing' && leftHanded
+  const project = (string: number, fret: number) => {
+    const i = fret - minFret
+    const along = (wires[i] + wires[i + 1]) / 2
+    const across = margin + order.indexOf(string) * stringStep
+    return vertical ? { x: across, y: along } : { x: mirror ? width - along : along, y: across }
   }
-
-  const markAt = new Map(marks.map(m => [`${m.string}-${m.fret}`, m]))
-  const inlays = [3, 5, 7, 9].filter(f => f >= Math.max(1, minFret) && f <= maxFret)
-  const g = geometry
-
-  const topString = playing ? 6 : leftHanded ? 6 : 1
-  const bottomString = playing ? 1 : leftHanded ? 1 : 6
-  const neckStyle = playing
-    ? { '--neck-w': `${Math.round(240 * g.w / g.h)}px`, '--neck-ratio': String(g.w / g.h) } as CSSProperties
-    : undefined
-  return <div className={`shared-fretboard ${vertical ? 'is-vertical' : playing ? 'is-playing' : 'is-horizontal'}${playing && leftHanded ? ' is-left' : ''}`} style={neckStyle}>
-    <svg ref={svgRef} className={`fretboard ${vertical ? 'vertical' : ''}`} viewBox={`0 0 ${g.w} ${g.h}`} role="group" aria-label={label}
-      preserveAspectRatio="xMidYMin meet" style={playing ? undefined : { width: '100%', height: 'auto' }}>
-      <defs><linearGradient id="fb-wood" x1="0" y1="0" x2={vertical ? 1 : 0} y2={vertical ? 0 : 1}><stop offset="0" stopColor="#5a4030"/><stop offset="0.5" stopColor="#3c2b25"/><stop offset="1" stopColor="#59402f"/></linearGradient></defs>
-      {g.kind === 'v' ? <>
-        <rect x={g.x(leftHanded ? 1 : 6)} y={g.nutY} width={CELL * 5} height={g.wires[g.wires.length - 1] - g.nutY} fill="url(#fb-wood)"/>
-        {inlays.map(f => <circle key={f} cx={(g.x(4) + g.x(3)) / 2} cy={g.cell(3, f).cy} r="7" fill="#d8c7a9" opacity="0.65"/>)}
-        {maxFret >= 12 && minFret <= 12 && [[5, 4], [3, 2]].map(([a, b]) => <circle key={a} cx={(g.x(a) + g.x(b)) / 2} cy={g.cell(3, 12).cy} r="7" fill="#d8c7a9" opacity="0.65"/>)}
-        {minFret <= 1 && <rect x={g.x(leftHanded ? 1 : 6) - 2} y={g.nutY - 4} width={CELL * 5 + 4} height="7" rx="2" fill="#ead9be"/>}
-        {g.wires.slice(1).map((y, i) => <line key={i} x1={g.x(leftHanded ? 1 : 6)} x2={g.x(leftHanded ? 6 : 1)} y1={y} y2={y} stroke="#c8c8c0" strokeWidth="2.5"/>)}
-        {STRINGS.map(s => <g key={s}><line x1={g.x(s)} x2={g.x(s)} y1={g.top} y2={g.wires[g.wires.length - 1]} stroke="#c5bdb1" strokeWidth={1 + (s - 1) * 0.4}/><text x={g.x(s)} y="16" textAnchor="middle" className="svg-string-label" aria-label={`第 ${s} 弦`}>{s}</text></g>)}
-        {frets.map(f => <text key={f} x="13" y={g.cell(6, f).cy + 4} textAnchor="middle" className="svg-fret-label">{f}</text>)}
-      </> : <>
-        <rect x={g.nutX} y={g.y(topString)} width={g.wires[g.wires.length - 1] - g.nutX} height={40 * 5} fill="url(#fb-wood)"/>
-        {inlays.map(f => <circle key={f} cx={g.cell(3, f).cx} cy={(g.y(3) + g.y(4)) / 2} r="7" fill="#d8c7a9" opacity="0.62"/>)}
-        {maxFret >= 12 && minFret <= 12 && [[2, 3], [4, 5]].map(([a, b]) => <circle key={a} cx={g.cell(3, 12).cx} cy={(g.y(a) + g.y(b)) / 2} r="7" fill="#d8c7a9" opacity="0.62"/>)}
-        {minFret <= 1 && <rect x={g.nutX - 4} y={g.y(topString) - 2} width="7" height={40 * 5 + 4} rx="2" fill="#ead9be"/>}
-        {g.wires.slice(1).map((x, i) => <line key={i} x1={x} x2={x} y1={g.y(topString)} y2={g.y(bottomString)} stroke="#c8c8c0" strokeWidth="2.5"/>)}
-        {STRINGS.map(s => <g key={s}><line x1={hasOpen ? 8 : g.nutX} x2={g.wires[g.wires.length - 1] + 10} y1={g.y(s)} y2={g.y(s)} stroke="#c5bdb1" strokeWidth={1 + (s - 1) * 0.4}/>{playing && <text x={22} y={g.y(s) + 4} textAnchor="middle" className="svg-string-label" aria-label={`第 ${s} 弦`}>{s}</text>}</g>)}
-        {frets.map(f => <text key={f} x={g.cell(1, f).cx} y="266" textAnchor="middle" className="svg-fret-label">{f}</text>)}
-      </>}
-      {STRINGS.flatMap(s => frets.map(f => {
-        const { cx, cy, rect } = g.cell(s, f)
-        const mark = markAt.get(`${s}-${f}`)
-        const midi = noteAt(tuning, s, f)
-        const style = mark ? TONE_STYLE[mark.tone] : undefined
-        const text = mark?.label ?? (showNoteNames ? pcName(midi) : '')
-        const interactive = !!onSelect && !disabled
-        const r = 13
-        return <g key={`${s}-${f}`} data-cell={`${s}-${f}`} className={`fret-cell${interactive ? ' interactive' : ''}`} role={onSelect ? 'button' : undefined} tabIndex={onSelect ? 0 : undefined}
-          aria-disabled={onSelect && disabled ? true : undefined}
-          aria-label={`${positionLabel(s, f)}${mark?.label ? `，${mark.label}` : showNoteNames ? `，${pcName(midi)}` : ''}${mark ? `（${MARK_TEXT[mark.tone]}）` : ''}`}
-          onClick={() => { if (interactive) onSelect!(s, f) }} onKeyDown={e => onKey(e, s, f)}>
-          <rect {...rect} fill="transparent"/>
-          {style && (style.shape === 'square'
-            ? <rect x={cx - r} y={cy - r} width={r * 2} height={r * 2} rx="4" fill={style.fill} stroke={style.stroke} strokeWidth="1.5"/>
-            : style.shape === 'diamond'
-              ? <polygon points={`${cx},${cy - r - 2} ${cx + r + 2},${cy} ${cx},${cy + r + 2} ${cx - r - 2},${cy}`} fill={style.fill} stroke={style.stroke} strokeWidth="1.5"/>
-              : <circle cx={cx} cy={cy} r={r} fill={style.fill} stroke={style.stroke} strokeWidth="1.5"/>)}
-          {!style && showNoteNames && <circle cx={cx} cy={cy} r={11} fill="#29313b" stroke="#6f6658" strokeWidth="1"/>}
-          {text && <text x={cx} y={cy + 4} textAnchor="middle" className="svg-note" fill={style?.text ?? '#e8e2d6'}>{text}</text>}
+  const edge = (index: number) => { const at = wires[index]; return mirror ? width - at : at }
+  const move = (event: PointerEvent) => { if (gesture.current && Math.hypot(event.clientX - gesture.current.x, event.clientY - gesture.current.y) > 8) gesture.current.moved = true }
+  const key = (event: KeyboardEvent, string: number, fret: number) => {
+    if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); if (!disabled) onSelect?.(string, fret, 'keyboard'); return }
+    if (!event.key.startsWith('Arrow')) return
+    event.preventDefault()
+    const next = nextPosition(string, fret, event.key, orientation, leftHanded, selectableRange?.[0] ?? minFret, selectableRange?.[1] ?? maxFret)
+    setFocus(next)
+    ref.current?.querySelector<SVGGElement>(`[data-cell="${next.string}-${next.fret}"]`)?.focus()
+  }
+  const marksByCell = new Map(marks.map(m => [`${m.string}-${m.fret}`, m]))
+  const initialFret = Math.max(selectableRange?.[0] ?? minFret, Math.min(selectableRange?.[1] ?? maxFret, focus.fret))
+  return <div className={`shared-fretboard ${vertical ? 'is-vertical' : orientation === 'playing' ? 'is-playing' : 'is-horizontal'}`}>
+    <svg ref={ref} className={`fretboard ${vertical ? 'vertical' : ''}`} viewBox={`0 0 ${width} ${height}`} role="group" aria-label={label}>
+      <rect x={vertical ? margin : 8} y={vertical ? 8 : margin} width={vertical ? stringStep * 5 : width - 16} height={vertical ? height - 16 : stringStep * 5} fill="#362c26"/>
+      {frets.map((f, i) => {
+        const at = edge(i + 1)
+        return vertical ? <line key={f} x1={margin} x2={margin + stringStep * 5} y1={at} y2={at} stroke="#b1aaa0" strokeWidth="2"/> : <line key={f} x1={at} x2={at} y1={margin} y2={margin + stringStep * 5} stroke="#b1aaa0" strokeWidth="2"/>
+      })}
+      {minFret === 0 && (vertical ? <rect x={margin - 3} y={margin + step - 3} width={stringStep * 5 + 6} height="6" fill="#ead9be"/> : <rect x={edge(1) - 3} y={margin - 3} width="6" height={stringStep * 5 + 6} fill="#ead9be"/>)}
+      {frets.filter(f => [3, 5, 7, 9, 12].includes(f)).flatMap(f => {
+        const a = project(3, f), b = project(4, f)
+        const x = (a.x + b.x) / 2, y = (a.y + b.y) / 2
+        return (f === 12 ? [-stringStep, stringStep] : [0]).map(offset => <circle key={`${f}-${offset}`} cx={x + (vertical ? offset : 0)} cy={y + (vertical ? 0 : offset)} r="6" fill="#d5c6aa" opacity=".6"/>)
+      })}
+      {[6, 5, 4, 3, 2, 1].map(string => {
+        const a = project(string, minFret), b = project(string, maxFret)
+        return <g key={string}>
+          <line x1={vertical ? a.x : Math.min(edge(0), edge(frets.length))} x2={vertical ? a.x : Math.max(edge(0), edge(frets.length))} y1={vertical ? edge(0) : a.y} y2={vertical ? edge(frets.length) : a.y} stroke="#c5bdb1" strokeWidth={1 + (string - 1) * .35}/>
+          <text x={vertical ? a.x : mirror ? width - 16 : 16} y={vertical ? 20 : a.y + 4} textAnchor="middle" className="svg-string-label">{string}</text>
+        </g>
+      })}
+      {frets.map(f => { const p = project(1, f); return <text key={f} x={vertical ? 16 : p.x} y={vertical ? p.y + 4 : height - 15} textAnchor="middle" className="svg-fret-label">{f}</text> })}
+      {[6, 5, 4, 3, 2, 1].flatMap(string => frets.map(fret => {
+        const cellStep = wires[fret - minFret + 1] - wires[fret - minFret]
+        const p = project(string, fret), mark = marksByCell.get(`${string}-${fret}`)
+        const name = displayNote(PC_SHARP[(tuning[6 - string] + fret) % 12])
+        const text = mark?.label ?? (showNoteNames ? name : '')
+        const inRange = !selectableRange || (fret >= selectableRange[0] && fret <= selectableRange[1])
+        const interactive = !!onSelect && !disabled && inRange
+        return <g key={`${string}-${fret}`} data-cell={`${string}-${fret}`} className={`fret-cell${interactive ? ' interactive' : ''}`} role={onSelect ? 'button' : undefined} tabIndex={onSelect ? (focus.string === string && initialFret === fret ? 0 : -1) : undefined}
+          aria-disabled={onSelect && (disabled || !inRange) ? true : undefined} aria-label={cellLabel?.(string, fret) ?? `${positionLabel(string, fret)}${text ? `，${text}` : ''}${mark ? `（${LABELS[mark.tone]}）` : ''}`}
+          onFocus={() => setFocus({ string, fret })} onKeyDown={e => { if (!inRange && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); return }; key(e, string, fret) }}
+          onPointerDown={e => { gesture.current = { x: e.clientX, y: e.clientY, moved: false } }} onPointerMove={move} onPointerCancel={() => { if (gesture.current) gesture.current.moved = true }}
+          onClick={e => { if (interactive && (e.detail === 0 || !gesture.current?.moved)) onSelect!(string, fret); gesture.current = null }}>
+          <rect x={p.x - (vertical ? stringStep : cellStep) / 2} y={p.y - (vertical ? cellStep : stringStep) / 2} width={vertical ? stringStep : cellStep} height={vertical ? cellStep : stringStep} fill="transparent"/>
+          {mark && (mark.tone === 'root' || mark.tone === 'reference' ? <rect x={p.x - 14} y={p.y - 14} width="28" height="28" rx="3" fill={COLORS[mark.tone]}/> : <circle cx={p.x} cy={p.y} r="15" fill={COLORS[mark.tone]} stroke="#ecede8"/>)}
+          {text && <text x={p.x} y={p.y + 4} textAnchor="middle" className="svg-note" style={{ fill: mark?.tone === 'root' || mark?.tone === 'reference' ? '#1b1611' : '#f7f5ef' }}>{text}</text>}
         </g>
       }))}
     </svg>
   </div>
 }
-
-const MARK_TEXT: Record<MarkTone, string> = { root: '根音', target: '目標', selected: '已選', correct: '正確', wrong: '你選的', reference: '參考', neutral: '標示' }

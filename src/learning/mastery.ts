@@ -25,7 +25,7 @@ export interface NodeMastery {
   dueItems: number
 }
 
-const firstTries = (attempts: ExerciseAttempt[]) => attempts.filter(a => !a.retryOf)
+const firstTries = (attempts: ExerciseAttempt[]) => attempts.filter(a => !a.retryOf && a.inputMethod !== 'microphone')
 const dayKey = (t: number) => new Date(t).toDateString()
 
 export function computeNodeMastery(nodeId: string, attempts: ExerciseAttempt[], reviews: Map<string, ReviewState>, selfReports: SelfReport[], now: number): NodeMastery {

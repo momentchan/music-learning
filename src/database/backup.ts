@@ -4,7 +4,7 @@ import type { ReviewState } from '../learning/scheduler'
 import type { SettingRecord } from './schema'
 
 export const BACKUP_FORMAT = 'guitar-lab-backup'
-export const BACKUP_SCHEMA_VERSION = 4
+export const BACKUP_SCHEMA_VERSION = 5
 export const MAX_BACKUP_BYTES = 20 * 1024 * 1024
 const MAX_RECORDS = 250_000
 const MAX_PAYLOAD_CHARS = 50_000
@@ -48,7 +48,7 @@ export function validateBackup(json: unknown, now = Date.now()): ValidationResul
   const fail = (message: string) => { if (errors.length < 20) errors.push(message) }
   if (!isObj(json)) return { ok: false, errors: ['備份檔格式錯誤：最外層必須是物件。'] }
   if (json.format !== BACKUP_FORMAT) return { ok: false, errors: ['這不是 Guitar Lab 的備份檔（format 不符）。'] }
-  if (json.schemaVersion !== BACKUP_SCHEMA_VERSION) return { ok: false, errors: [`不支援的備份版本 ${String(json.schemaVersion)}（目前支援版本 ${BACKUP_SCHEMA_VERSION}）。`] }
+  if (json.schemaVersion !== 4 && json.schemaVersion !== BACKUP_SCHEMA_VERSION) return { ok: false, errors: [`不支援的備份版本 ${String(json.schemaVersion)}（目前支援版本 ${BACKUP_SCHEMA_VERSION}）。`] }
   if (!isTime(json.exportedAt, now)) fail('exportedAt 時間不正確。')
   if (!isObj(json.data)) return { ok: false, errors: ['缺少 data 區塊。'] }
   const data = json.data
@@ -83,6 +83,8 @@ export function validateBackup(json: unknown, now = Date.now()): ValidationResul
     if (!isId(a.nodeId)) fail(`attempts[${i}] 缺少 nodeId。`)
     if (!isTime(a.timestamp, now)) fail(`attempts[${i}] 時間不正確。`)
     if (typeof a.correct !== 'boolean' || !RESULTS.has(a.result as string)) fail(`attempts[${i}] 結果欄位不正確。`)
+    if (a.inputMethod !== undefined && !['tap', 'keyboard', 'microphone', 'legacy'].includes(a.inputMethod as string)) fail(`attempts[${i}] inputMethod 不正確。`)
+    if (a.verificationScope !== undefined && !['pitchClass', 'exactPitch', 'screenPosition', 'noteNaming', 'unknown'].includes(a.verificationScope as string)) fail(`attempts[${i}] verificationScope 不正確。`)
     if (!LEVELS.has(a.evidenceLevel as string)) fail(`attempts[${i}] evidenceLevel 不正確。`)
     if (!Array.isArray(a.reviewItemIds) || !(a.reviewItemIds as unknown[]).every(isId)) fail(`attempts[${i}] reviewItemIds 不正確。`)
     if (!isObj(a.itemResults) || !Object.values(a.itemResults).every(v => typeof v === 'boolean')) fail(`attempts[${i}] itemResults 不正確。`)
@@ -100,10 +102,17 @@ export function validateBackup(json: unknown, now = Date.now()): ValidationResul
     })
   }
   ;(data.settings as unknown[]).forEach((r, i) => {
-    if (!isObj(r) || !isId(r.id) || JSON.stringify(r).length > MAX_PAYLOAD_CHARS) fail(`settings[${i}] 不正確。`)
+    if (!isObj(r) || !isId(r.id) || JSON.stringify(r).length > MAX_PAYLOAD_CHARS) return fail(`settings[${i}] 不正確。`)
+    if (r.id === 'preferences') {
+      if (!isObj(r.value)) return fail(`settings[${i}] 偏好格式不正確。`)
+      const enums: Record<string, unknown[]> = { practiceContext: ['pocket', 'instrument'], practiceFocus: ['notes', 'naming', 'positions', 'intervals', 'chord-tones'], answerInput: ['tap', 'play'], advancePolicy: ['auto', 'manual'], practiceLayout: ['vertical', 'horizontal'] }
+      for (const [key, choices] of Object.entries(enums)) if (r.value[key] !== undefined && !choices.includes(r.value[key])) fail(`settings[${i}] ${key} 不正確。`)
+    }
   })
   if (errors.length) return { ok: false, errors }
-  const envelope = json as unknown as BackupEnvelope
+  const envelope = structuredClone(json) as unknown as BackupEnvelope
+  envelope.schemaVersion = BACKUP_SCHEMA_VERSION
+  envelope.data.attempts = envelope.data.attempts.map(a => ({ ...a, inputMethod: a.inputMethod ?? 'legacy', verificationScope: a.verificationScope ?? 'unknown' }))
   const counts = Object.fromEntries(TABLES.map(t => [t, envelope.data[t].length])) as Record<keyof BackupData, number>
   return { ok: true, envelope, counts }
 }

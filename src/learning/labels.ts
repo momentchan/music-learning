@@ -23,6 +23,7 @@ export function itemLabel(itemId: string): string {
     if (itemId.startsWith('key.')) return `${displayNote(p[1])} 大調第 ${p[2]} 級`
     if (itemId.startsWith('harmony.function.')) return `第 ${p[2]} 級的功能`
     if (itemId.startsWith('harmony.prog.')) return `進行 ${p.slice(2).join('.').replace(/-/g, '–')}`
+    if (itemId.startsWith('chord.tone.')) return `${p[2]} 和弦的${p[3] === '1' ? '根音' : p[3] === '3' ? '三音' : '五音'}`
     if (itemId.startsWith('chord.shape.')) return `${p[2]} 指型`
     if (itemId === 'chord.diagram.muted') return '和弦圖：不彈的弦'
     if (itemId === 'chord.diagram.frets') return '和弦圖：格數'

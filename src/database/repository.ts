@@ -48,6 +48,11 @@ export class DexieLearningRepository implements LearningRepository {
   async recordAttempt(attempt: ExerciseAttempt, session?: SessionPatch) {
     const { db } = this
     return db.transaction('rw', [db.attempts, db.reviews, db.sessions], async () => {
+      if (attempt.inputMethod === 'microphone') {
+        attempt = { ...attempt, itemResults: {}, reviewItemIds: [], string: undefined, fret: undefined }
+      }
+      const existing = await db.attempts.get(attempt.id)
+      if (existing) return { attempt: existing, reviews: [] }
       await db.attempts.add(attempt)
       const ids = Object.keys(attempt.itemResults)
       const previous = await db.reviews.bulkGet(ids)
@@ -83,20 +88,26 @@ export class DexieLearningRepository implements LearningRepository {
 
   async listSessions(limit = 30) { return (await this.db.sessions.orderBy('startedAt').reverse().limit(limit).toArray()) }
   async queueBridge(item: BridgeQueueItem) {
-    const existing = await this.db.bridgeQueue.where('nodeId').equals(item.nodeId).filter(b => !b.completedAt && b.taskId === item.taskId).count()
-    if (!existing) await this.db.bridgeQueue.put(item)
+    await this.db.transaction('rw', this.db.bridgeQueue, async () => {
+      const existing = await this.db.bridgeQueue.where('nodeId').equals(item.nodeId).filter(b => !b.completedAt && b.taskId === item.taskId).count()
+      if (!existing) await this.db.bridgeQueue.put(item)
+    })
   }
   async listBridgeQueue() { return (await this.db.bridgeQueue.toArray()).filter(b => !b.completedAt).sort((a, b) => a.createdAt - b.createdAt) }
   async completeBridge(id: string, report: SelfReport) {
     const { db } = this
     await db.transaction('rw', [db.bridgeQueue, db.selfReports], async () => {
       await db.selfReports.add(report)
-      const item = await db.bridgeQueue.get(id)
-      if (item) await db.bridgeQueue.put({ ...item, completedAt: report.timestamp })
+      const tasks = await db.bridgeQueue.where('nodeId').equals(report.nodeId).filter(b => b.taskId === report.bridgeTaskId && b.createdAt <= report.timestamp).toArray()
+      for (const item of tasks) await db.bridgeQueue.put({ ...item, completedAt: Math.max(item.completedAt ?? 0, report.timestamp) })
     })
   }
   getSelfReports() { return this.db.selfReports.toArray() }
-  async getPreferences() { return { ...DEFAULT_PREFERENCES, ...((await this.db.settings.get('preferences'))?.value as Partial<Preferences> | undefined) } }
+  async getPreferences() {
+    const saved = (await this.db.settings.get('preferences'))?.value as Partial<Preferences> | undefined
+    const suggested = typeof window !== 'undefined' && window.matchMedia('(min-width: 1000px)').matches ? 'instrument' : 'pocket'
+    return { ...DEFAULT_PREFERENCES, practiceContext: suggested, ...saved } as Preferences
+  }
   async savePreferences(preferences: Preferences) { await this.db.settings.put({ id: 'preferences', value: preferences }) }
   async getSetting<T>(id: string) { return (await this.db.settings.get(id))?.value as T | undefined }
   async saveSetting(id: string, value: unknown) { await this.db.settings.put({ id, value }) }
@@ -114,13 +125,17 @@ export class DexieLearningRepository implements LearningRepository {
   /** Validated envelopes only. Replace keeps a pre-import backup; both modes rebuild schedules from attempts. */
   async importBackup(envelope: BackupEnvelope, mode: 'replace' | 'merge', now = Date.now()) {
     const { db } = this
-    const preImport = mode === 'replace' ? await this.exportAll(now) : undefined
+    const preImport = await this.exportAll(now)
     const tables = [db.attempts, db.sessions, db.reviews, db.events, db.selfReports, db.bridgeQueue, db.progressions, db.pathways, db.settings, db.backups]
     const preImportBackupId = preImport ? `pre-import-${now}` : undefined
     await db.transaction('rw', tables, async () => {
       const d = envelope.data
+      const localPreferences = await this.getPreferences()
+      const safeSettings = d.settings.map(setting => setting.id === 'preferences' ? {
+        ...setting, value: { ...DEFAULT_PREFERENCES, ...(setting.value as Partial<Preferences>), latencyOffsetMs: localPreferences.latencyOffsetMs, answerInput: 'tap' },
+      } : setting)
+      await db.backups.put({ id: preImportBackupId!, createdAt: now, reason: 'pre-import', envelope: preImport })
       if (mode === 'replace') {
-        await db.backups.put({ id: preImportBackupId!, createdAt: now, reason: 'pre-import', envelope: preImport })
         for (const table of [db.attempts, db.sessions, db.reviews, db.events, db.selfReports, db.bridgeQueue, db.progressions, db.pathways]) await table.clear()
         await db.attempts.bulkAdd(d.attempts)
         await db.sessions.bulkAdd(d.sessions)
@@ -129,7 +144,7 @@ export class DexieLearningRepository implements LearningRepository {
         await db.bridgeQueue.bulkAdd(d.bridgeQueue)
         await db.progressions.bulkAdd(d.progressions)
         await db.pathways.bulkAdd(d.pathways)
-        await db.settings.bulkPut(d.settings)
+        await db.settings.bulkPut(safeSettings)
       } else {
         // Merge: keep existing records when IDs collide; never overwrite local history.
         const addMissing = async <T,>(table: { bulkGet(keys: string[]): Promise<(T | undefined)[]>; bulkAdd(items: T[]): Promise<unknown> }, items: T[], key: (item: T) => string | undefined) => {
@@ -138,12 +153,28 @@ export class DexieLearningRepository implements LearningRepository {
           if (fresh.length) await table.bulkAdd(fresh)
         }
         await addMissing(db.attempts, d.attempts, a => a.id)
-        await addMissing(db.sessions, d.sessions, s => s.id)
+        for (const incoming of d.sessions) {
+          const local = await db.sessions.get(incoming.id)
+          const chosen = !local ? incoming : local.status === 'completed' ? local : incoming.status === 'completed' || incoming.updatedAt > local.updatedAt ? incoming : local
+          await db.sessions.put(chosen)
+        }
         await addMissing(db.events, d.events, e => e.id)
         await addMissing(db.selfReports, d.selfReports, r => r.id)
-        await addMissing(db.bridgeQueue, d.bridgeQueue, b => b.id)
+        for (const incoming of d.bridgeQueue) {
+          const local = await db.bridgeQueue.get(incoming.id)
+          await db.bridgeQueue.put(local ? { ...local, completedAt: Math.max(local.completedAt ?? 0, incoming.completedAt ?? 0) || undefined } : incoming)
+        }
+        const incomingPreferences = safeSettings.find(s => s.id === 'preferences')
+        if (incomingPreferences) await db.settings.put(incomingPreferences)
         await addMissing(db.progressions, d.progressions, p => p.id)
         await addMissing(db.pathways, d.pathways, p => p.pathwayId)
+      }
+      // A completion imported under a different queue ID still closes the older logical task.
+      const reports = await db.selfReports.toArray()
+      const pending = await db.bridgeQueue.toArray()
+      for (const task of pending) {
+        const report = reports.filter(r => r.nodeId === task.nodeId && r.bridgeTaskId === task.taskId && r.timestamp >= task.createdAt).sort((a, b) => b.timestamp - a.timestamp)[0]
+        if (report) await db.bridgeQueue.put({ ...task, completedAt: Math.max(task.completedAt ?? 0, report.timestamp) })
       }
       await db.reviews.clear()
       await db.reviews.bulkPut([...reviewsFromAttempts(await db.attempts.toArray()).values()])

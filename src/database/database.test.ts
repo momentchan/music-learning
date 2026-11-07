@@ -170,3 +170,85 @@ describe('backup export / import', () => {
     expect(validateBackup(good, T0 + 6000).ok).toBe(true)
   })
 })
+
+
+describe('practice evidence and cross-device handoff', () => {
+  it('never schedules position recall from microphone evidence, even if a caller supplies position fields', async () => {
+    const repo = new DexieLearningRepository(new GuitarLabDB(freshName()))
+    await repo.saveSession(session('s1'))
+    const played = { ...newAttempt('mic', 's1', true), inputMethod: 'microphone' as const, string: 5, fret: 3, verificationScope: 'exactPitch' as const }
+    await repo.recordAttempt(played)
+    expect((await repo.getReviews()).size).toBe(0)
+    expect((await repo.getAttempts())[0]).toMatchObject({ itemResults: {}, reviewItemIds: [] })
+    expect((await repo.getAttempts())[0].string).toBeUndefined()
+    await repo.recordAttempt(played)
+    expect(await repo.getAttempts()).toHaveLength(1)
+  })
+  it('loads v4 backups conservatively and rejects unsupported evidence metadata', async () => {
+    const repo = new DexieLearningRepository(new GuitarLabDB(freshName()))
+    await repo.saveSession(session('s1')); await repo.recordAttempt(newAttempt('old', 's1', true))
+    const old = { ...await repo.exportAll(T0 + 1000), schemaVersion: 4 }
+    const parsed = validateBackup(old, T0 + 2000)
+    expect(parsed.ok).toBe(true)
+    if (!parsed.ok) throw new Error('invalid')
+    expect(parsed.envelope.schemaVersion).toBe(5)
+    expect(parsed.envelope.data.attempts[0]).toMatchObject({ inputMethod: 'legacy', verificationScope: 'unknown' })
+    const invalid = structuredClone(old)
+    invalid.data.attempts[0].inputMethod = 'telepathy' as never
+    expect(validateBackup(invalid, T0 + 2000).ok).toBe(false)
+    const badPreferences = structuredClone(old)
+    badPreferences.data.settings.push({ id: 'preferences', value: { practiceFocus: 'invalid-topic' } })
+    expect(validateBackup(badPreferences, T0 + 2000).ok).toBe(false)
+  })
+  it('imports session completion and task completion without resurrecting them or duplicating attempts', async () => {
+    const phone = new DexieLearningRepository(new GuitarLabDB(freshName()))
+    const desktop = new DexieLearningRepository(new GuitarLabDB(freshName()))
+    await phone.saveSession(session('s1'))
+    await phone.recordAttempt(newAttempt('a1', 's1', true))
+    await phone.queueBridge({ id: 'task', nodeId: 'chord.open', taskId: 'play-c', createdAt: T0 })
+    const before = await phone.exportAll(T0 + 1000)
+    await desktop.importBackup(before, 'merge', T0 + 2000)
+    await desktop.saveSession({ ...session('s1'), status: 'completed', updatedAt: T0 + 3000, endedAt: T0 + 3000 })
+    await desktop.completeBridge('task', { id: 'report', nodeId: 'chord.open', bridgeTaskId: 'play-c', rating: 2, verified: false, timestamp: T0 + 3000 })
+    await phone.importBackup(await desktop.exportAll(T0 + 4000), 'merge', T0 + 5000)
+    await phone.importBackup(before, 'merge', T0 + 6000)
+    expect(await phone.getAttempts()).toHaveLength(1)
+    expect(await phone.listBridgeQueue()).toHaveLength(0)
+    expect((await phone.getSession('s1'))?.status).toBe('completed')
+    expect(await phone.latestPreImportBackup()).toBeDefined()
+  })
+  it('preserves device latency and never enables microphone input when importing preferences', async () => {
+    const source = new DexieLearningRepository(new GuitarLabDB(freshName()))
+    const target = new DexieLearningRepository(new GuitarLabDB(freshName()))
+    await source.savePreferences({ ...await source.getPreferences(), latencyOffsetMs: 300, answerInput: 'play', practiceFocus: 'positions' })
+    await target.savePreferences({ ...await target.getPreferences(), latencyOffsetMs: 40 })
+    const envelope = await source.exportAll(T0 + 1000)
+    for (const mode of ['merge', 'replace'] as const) {
+      await target.importBackup(envelope, mode, T0 + 2000)
+      expect(await target.getPreferences()).toMatchObject({ latencyOffsetMs: 40, answerInput: 'tap', practiceFocus: 'positions' })
+    }
+  })
+})
+
+
+it('upgrades a v4 database with unknown evidence, keeping its questions and history', async () => {
+  const name = freshName()
+  const old = new Dexie(name)
+  old.version(4).stores({ attempts: 'id, sessionId, exerciseType, topicId, nodeId, timestamp, string, fret, note, targetString, targetFret, *reviewItemIds', settings: 'id', sessions: 'id, status, mode, startedAt, updatedAt', reviews: 'itemId, dueAt, box', events: 'id, nodeId, kind, timestamp', selfReports: 'id, nodeId, bridgeTaskId, timestamp', bridgeQueue: 'id, nodeId, createdAt, completedAt', progressions: 'id, updatedAt', pathways: 'pathwayId', backups: 'id, createdAt' })
+  const attempt = newAttempt('before-v5', 's1', true)
+  await old.table('attempts').put(attempt); await old.table('sessions').put(session('s1')); old.close()
+  const upgraded = new GuitarLabDB(name)
+  const repo = new DexieLearningRepository(upgraded)
+  expect((await repo.getAttempts())[0]).toMatchObject({ id: 'before-v5', inputMethod: 'legacy', verificationScope: 'unknown', question: attempt.question })
+  expect((await repo.getSession('s1'))?.status).toBe('active')
+  upgraded.close()
+})
+
+
+it('deduplicates concurrent logical bridge tasks and completes the existing task by its report', async () => {
+  const repo = new DexieLearningRepository(new GuitarLabDB(freshName()))
+  await Promise.all(['first', 'second'].map(id => repo.queueBridge({ id, nodeId: 'chord.open', taskId: 'play-c', createdAt: T0 })))
+  expect(await repo.listBridgeQueue()).toHaveLength(1)
+  await repo.completeBridge('unused-new-id', { id: 'report', nodeId: 'chord.open', bridgeTaskId: 'play-c', rating: 1, verified: false, timestamp: T0 + 1000 })
+  expect(await repo.listBridgeQueue()).toHaveLength(0)
+})

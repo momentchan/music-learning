@@ -7,7 +7,7 @@ export default defineConfig({
   plugins: [
     react(), tailwindcss(),
     VitePWA({
-      registerType: 'autoUpdate',
+      registerType: 'prompt',
       includeAssets: ['favicon.svg'],
       manifest: {
         name: 'Guitar Lab', short_name: 'Guitar Lab',

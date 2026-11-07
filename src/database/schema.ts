@@ -4,7 +4,7 @@ import { replayHistory, type ReviewState } from '../learning/scheduler'
 import { isV4Attempt, legacySessionId, mapLegacyAttempt, type LegacyAttempt } from './legacy'
 
 export const DB_NAME = 'guitar-lab'
-export const DB_VERSION = 4
+export const DB_VERSION = 5
 
 export interface SettingRecord { id: string; value: unknown }
 export interface BackupRecord { id: string; createdAt: number; reason: string; envelope: unknown }
@@ -40,6 +40,12 @@ export class GuitarLabDB extends Dexie {
       pathways: 'pathwayId',
       backups: 'id, createdAt',
     }).upgrade(migrateToV4)
+    this.version(5).stores({}).upgrade(async tx => {
+      await tx.table('attempts').toCollection().modify((a: ExerciseAttempt) => {
+        a.inputMethod ??= 'legacy'
+        a.verificationScope ??= 'unknown'
+      })
+    })
   }
 }
 
@@ -68,7 +74,7 @@ export async function migrateToV4(tx: Transaction): Promise<void> {
 }
 
 export function reviewsFromAttempts(attempts: ExerciseAttempt[]): Map<string, ReviewState> {
-  return replayHistory(attempts.flatMap(a => Object.entries(a.itemResults ?? {}).map(([itemId, correct]) => ({ itemId, correct, assisted: a.assisted, timestamp: a.timestamp }))))
+  return replayHistory(attempts.filter(a => a.inputMethod !== 'microphone').flatMap(a => Object.entries(a.itemResults ?? {}).map(([itemId, correct]) => ({ itemId, correct, assisted: a.assisted, timestamp: a.timestamp }))))
 }
 
 export { legacySessionId }

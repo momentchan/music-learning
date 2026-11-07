@@ -1,3 +1,5 @@
+import { PracticeBoard } from '../components/fretboard/PracticeBoard'
+import type { FretMark } from '../components/fretboard/Fretboard'
 import { useEffect, useMemo, useState } from 'react'
 import { navigate } from '../app/router'
 import { NODES, PATHWAYS, UNLISTED_NODE_IDS, nodeById } from '../curriculum/nodes'
@@ -7,16 +9,33 @@ import { NODE_STATE_LABEL, pathwayCompletion, weakItems } from '../learning/mast
 import type { PracticeSession } from '../learning/records'
 import { boxLabel, isMissed } from '../learning/scheduler'
 import { PC_SHARP, displayNote } from '../music-theory/notes'
+import { audioIsOn } from '../stores/audioUi'
 import { useLearning } from '../stores/learning'
 
 export function ProgressScreen() {
   const learning = useLearning()
+  const [error, setError] = useState('')
+  async function strengthen(itemId: string) {
+    try {
+      await learning.savePreferences({ practiceFocus: itemId.startsWith('chord.tone.') ? 'chord-tones' : itemId.startsWith('interval.shape.') ? 'intervals' : 'notes' })
+      navigate(`/session/${await useLearning.getState().startGuided(audioIsOn())}`)
+    } catch { setError('無法開始加強練習，請再試一次。') }
+  }
   const [sessions, setSessions] = useState<PracticeSession[]>([])
   useEffect(() => { repository.listSessions(12).then(setSessions).catch(() => setSessions([])) }, [learning.attempts.length])
   const weak = useMemo(() => weakItems(learning.reviews.values(), 12), [learning.reviews])
   const nodes = NODES.filter(n => n.availability === 'available' && !UNLISTED_NODE_IDS.has(n.id))
 
+  const positions = new Map<string, FretMark>()
+  const ordered = [...learning.attempts].sort((a, b) => a.timestamp - b.timestamp)
+  for (const a of ordered) {
+    if (a.inputMethod === 'microphone' || a.string == null || a.fret == null) continue
+    positions.set(`${a.string}-${a.fret}`, { string: a.string, fret: a.fret, label: a.correct ? '✓' : '×', tone: a.correct ? 'correct' : 'wrong' })
+  }
+  const pitchAttempts = learning.attempts.filter(a => a.inputMethod === 'microphone')
   return <div className="progress">
+    {error && <p role="alert">{error}</p>}
+    <section className="card"><h3>實際練過的指板位置</h3><div className="progress-evidence"><span>位置紀錄 {positions.size} 格</span><span>音高驗證 {pitchAttempts.filter(a => a.correct).length}/{pitchAttempts.length} 次正確</span><span>持琴自評 {learning.selfReports.length} 次</span></div><p className="helper">✓ 最近答對的位置 · × 最近答錯的位置。空白代表沒有位置紀錄；音高驗證與自評不會填滿這張圖。</p><PracticeBoard tuning={[40,45,50,55,59,64]} marks={[...positions.values()]} leftHanded={learning.preferences.leftHanded} label="實際作答位置與最近結果"/></section>
     <section className="card">
       <h3>主題熟練度</h3>
       <p className="helper">熟悉 = 至少 8 次作答、兩天以上、正確率 ≥ 80%，且一半以上的項目進入 3 天以上複習間隔。流暢 = 再加上應用題 ≥ 75% 與 80% 項目進入 7 天以上間隔。</p>
@@ -47,7 +66,7 @@ export function ProgressScreen() {
 
     <section className="card">
       <h3>需要加強的項目</h3>
-      {weak.length ? <ul className="weak-list">{weak.map(w => <li key={w.itemId}><strong>{itemLabel(w.itemId)}</strong><span>{w.reason}</span></li>)}</ul>
+      {weak.length ? <ul className="weak-list">{weak.map(w => <li key={w.itemId}><strong>{itemLabel(w.itemId)}</strong><span>{w.reason}</span><button className="text-button" onClick={() => void strengthen(w.itemId)}>開始加強</button></li>)}</ul>
         : <p className="helper">目前沒有反覆答錯的項目（至少 3 次作答才會判斷，一次答錯不算弱點）。</p>}
     </section>
 

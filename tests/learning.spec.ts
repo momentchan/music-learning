@@ -35,6 +35,7 @@ async function answerCurrent(page: Page): Promise<boolean> {
   }
   await expect(page.getByRole('status').filter({ hasText: /正確|還不對|部分正確/ })).toBeVisible()
   const currentQuestion = await page.locator('.question-prompt').elementHandle()
+  if (await page.getByRole('status').filter({ hasText: /還不對|部分正確/ }).isVisible().catch(() => false)) await page.getByRole('button', { name: '下一題 →', exact: true }).click()
   await page.waitForFunction(element => !element?.isConnected, currentQuestion, { timeout: 4000 })
   return true
 }
@@ -146,6 +147,7 @@ test('session fretboard preserves proportions and hides open-string hints on a 3
   await page.setViewportSize({ width: 320, height: 844 })
   const tallerRatio = await board.evaluate(element => { const box = element.getBoundingClientRect(); return box.width / box.height })
   expect(tallerRatio).toBeCloseTo(ratio, 3)
+  await page.getByRole('button', { name: '3–6 格', exact: true }).click()
   await page.locator('.fret-cell.interactive[data-cell="6-5"]').tap()
   await expect(page.getByRole('status').filter({ hasText: /正確|還不對|部分正確/ })).toBeVisible()
   await expect(page.getByRole('button', { name: '確定' })).toHaveCount(0)

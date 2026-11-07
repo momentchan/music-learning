@@ -5,6 +5,18 @@
 
 ---
 
+## Implementation update — 2026-11-07
+
+The current shipped practice contract is documented in [PRACTICE_IMPLEMENTATION.md](PRACTICE_IMPLEMENTATION.md), with the approved improvement brief in [GUITAR_LAB_IMPROVEMENT_PROMPT.md](GUITAR_LAB_IMPROVEMENT_PROMPT.md). These changes supersede older phase/default statements below:
+
+- Pocket/instrument context is independent from tap/microphone input and is stored in the session snapshot.
+- Main practice uses a player-view neck, local fret windows on portrait phones, and a complete neck on desktop. The Lab retains full-neck exploration and textbook/TAB options using the same SVG renderer.
+- A played-position variant declares an exact MIDI target and checks its octave. Observed pitch never becomes an inferred string/fret or naming-recall result. Note-naming tasks keep note-name input.
+- Continuous practice remains available. Incorrect answers wait; correct answers may auto-advance. Pause, explicit end, keyboard controls and microphone teardown are implemented.
+- Schema/backup v5 supports v4 data without deleting history. Manual cross-device merge preserves completions, deduplicates attempts and keeps device latency local. There is no automatic cloud sync.
+- Pitch reference, metronome and one-minute chord-change self-assessment are available. Real-instrument detection accuracy and mobile microphone compatibility remain unverified; advanced sequence/polyphonic detection remains future work.
+- PWA readiness and a deferred, user-triggered update replace automatic updating during practice.
+
 ## 0. Mission
 
 Guitar Lab is a mobile-first, local-first web app that makes guitarists **better at playing**, not just better at answering theory quizzes.

@@ -4,16 +4,19 @@ import { nodeById } from '../../curriculum/nodes'
 import { repository } from '../../database/repository'
 import { naturalNoteConfirmation } from '../../exercise-engine/answerNote'
 import type { Grade, Question, Response } from '../../exercise-engine/types'
+import { playedQuestion } from '../../exercise-engine/playedAnswer'
 import { validate } from '../../exercise-engine/validate'
 import { t } from '../../i18n/zh-TW'
 import { ERROR_LABEL } from '../../learning/labels'
 import { recommendations } from '../../learning/mastery'
 import type { ExerciseAttempt, PlannedItem, PracticeSession, SessionSummary } from '../../learning/records'
-import { insertRecheck, recheckFor } from '../../learning/sessions'
+import { insertRecheck, recheckFor, withoutDegreePositionQuestions } from '../../learning/sessions'
 import { randomSeed } from '../../lib/rng'
 import { audioIsOn, useAudioUi } from '../../stores/audioUi'
 import { downloadJson, useLearning } from '../../stores/learning'
 import { LessonContentView } from './LessonCard'
+import { PlayListener } from '../../components/listen/PlayListener'
+import { DeviceTransfer } from '../../components/DeviceTransfer'
 import { QuestionView } from './QuestionView'
 
 interface AnswerState { grade: Grade; response: Response; attemptId: string; firstAttemptId: string }
@@ -27,6 +30,9 @@ export function SessionScreen({ sessionId }: { sessionId: string }) {
   const [showWhy, setShowWhy] = useState(false)
   const [holdAdvance, setHoldAdvance] = useState(false)
   const [saveError, setSaveError] = useState('')
+  const [paused, setPaused] = useState(false)
+  const [inputOverride, setInputOverride] = useState<'tap' | undefined>()
+  const actions = useRef({ next: () => {}, retry: () => {} })
   const [boxChanges, setBoxChanges] = useState({ promoted: 0, demoted: 0 })
   const shownAt = useRef(performance.now())
   const busy = useRef(false)
@@ -40,8 +46,11 @@ export function SessionScreen({ sessionId }: { sessionId: string }) {
     let cancelled = false
     repository.getSession(sessionId).then(s => {
       if (cancelled) return
-      setSession(s ?? null)
-      if (s) setView(s.cursor)
+      if (!s) { setSession(null); return }
+      const cleaned = withoutDegreePositionQuestions(s)
+      setSession(cleaned)
+      setView(cleaned.cursor)
+      if (cleaned !== s) void repository.saveSession({ ...s, ...cleaned, updatedAt: Date.now() })
     }).catch(() => setSession(null))
     return () => { cancelled = true; stop() }
   }, [sessionId, stop])
@@ -62,13 +71,31 @@ export function SessionScreen({ sessionId }: { sessionId: string }) {
 
   // Show the marked fret briefly, then move on. A wrong answer stays longer so the correct position can be seen.
   useEffect(() => {
-    if (!answer || holdAdvance || !session || session.status === 'completed' || session.cursor <= view) return
-    const delay = answer.grade.result === 'correct' ? 600 : 1800
+    if (paused || saveError || !answer || answer.grade.result !== 'correct' || learning.preferences.advancePolicy === 'manual' || holdAdvance || !session || session.status === 'completed' || session.cursor <= view) return
+    const delay = answer.response.kind === 'played-note' ? 1500 : 900
     const timer = window.setTimeout(() => advanceRef.current(), delay)
     return () => window.clearTimeout(timer)
-  }, [answer, holdAdvance, session, view])
+  }, [answer, holdAdvance, session, view, learning.preferences.advancePolicy, paused, saveError])
+
+  useEffect(() => {
+    const hide = () => { if (document.hidden) { setPaused(true); stop() } }
+    const keys = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement
+      if (event.repeat || event.ctrlKey || event.metaKey || event.altKey || target.closest('input,select,textarea,button,[contenteditable="true"],[data-cell]')) return
+      if (event.code === 'Space') { event.preventDefault(); setPaused(p => !p); stop() }
+      if (event.key === 'Enter') { event.preventDefault(); actions.current.next() }
+      if (event.key.toLowerCase() === 'r') { event.preventDefault(); actions.current.retry() }
+    }
+    document.addEventListener('visibilitychange', hide)
+    window.addEventListener('keydown', keys)
+    return () => { document.removeEventListener('visibilitychange', hide); window.removeEventListener('keydown', keys) }
+  }, [stop])
+
+  useEffect(() => { if (!paused) shownAt.current = performance.now() }, [paused])
 
   const item: PlannedItem | undefined = session?.plannedItems[view]
+  const instrument = session?.settings.practiceContext === 'instrument'
+  const inputMode = inputOverride ?? session?.settings.answerInput ?? (instrument ? learning.preferences.answerInput : 'tap')
   const questionCount = session?.plannedItems.filter(i => i.kind === 'question').length ?? 0
   const answeredCount = session?.outcomes.filter(o => o.result && o.result !== 'done').length ?? 0
 
@@ -78,27 +105,32 @@ export function SessionScreen({ sessionId }: { sessionId: string }) {
   if (session.status === 'completed' || !item) return <SessionSummaryView session={session} boxChanges={boxChanges}/>
 
   async function submit(question: Question, response: Response) {
-    if (busy.current || !session) return
+    if (busy.current || paused || saveError || !session) return
     busy.current = true
+    if (response.kind === 'played-note' && question.kind === 'fret-locate') question = playedQuestion(question)
     const grade = validate(question, response)
-    // Start from the tap, before any await, so the browser still treats it as a user gesture.
-    const confirmation = naturalNoteConfirmation(question, response, grade)
+    const microphone = response.kind === 'played-note'
+    // A played answer is already the guitar. Do not play it back into the open microphone.
+    const confirmation = inputMode === 'play' ? null : naturalNoteConfirmation(question, response, grade)
     confirming.current = !!confirmation && audioIsOn()
     if (confirming.current && confirmation) void play(confirmation)
     const isRetry = !!retry
     const now = Date.now()
     const attempt: ExerciseAttempt = {
       id: crypto.randomUUID(), sessionId: session.id, exerciseType: question.kind, templateId: question.templateId, topicId: question.nodeId, nodeId: question.nodeId,
-      reviewItemIds: question.reviewItemIds, itemResults: grade.itemResults, generatorVersion: question.generatorVersion, question, response,
+      inputMethod: microphone ? 'microphone' : response.kind === 'fret-locate' ? response.inputMethod ?? 'tap' : 'tap',
+      practiceContext: session.settings.practiceContext ?? 'pocket',
+      verificationScope: grade.verificationScope ?? (question.kind === 'fret-locate' ? 'screenPosition' : question.kind === 'fret-identify' ? 'noteNaming' : 'unknown'),
+      reviewItemIds: microphone ? [] : question.reviewItemIds, itemResults: grade.itemResults, generatorVersion: question.generatorVersion, question, response,
       expected: grade.expectedText, correct: grade.result === 'correct', result: grade.result, errorClass: grade.errorClass, evidenceLevel: question.evidenceLevel,
-      assisted: isRetry, retryOf: retry?.firstAttemptId, responseMs: question.kind === 'rhythm' ? 0 : Math.round(performance.now() - shownAt.current), replays: 0,
+      assisted: isRetry, retryOf: retry?.firstAttemptId, responseMs: microphone || question.kind === 'rhythm' ? 0 : Math.round(performance.now() - shownAt.current), replays: 0,
       difficulty: question.difficulty, timestamp: now,
       ...(question.kind === 'fret-locate' && response.kind === 'fret-locate' ? { string: response.string, fret: response.fret, targetString: question.string } : {}),
       ...(question.kind === 'fret-identify' ? { targetString: question.string, targetFret: question.fret } : {}),
     }
     let plannedItems = session.plannedItems
     const current = session.plannedItems[view]
-    if (!isRetry && grade.result !== 'correct' && current.kind === 'question' && !current.recheckOf) {
+    if (!microphone && !isRetry && grade.result !== 'correct' && current.kind === 'question' && !current.recheckOf) {
       const recheck = recheckFor(question, randomSeed())
       if (recheck) plannedItems = insertRecheck(plannedItems, view, recheck)
     }
@@ -119,7 +151,7 @@ export function SessionScreen({ sessionId }: { sessionId: string }) {
         demoted: c.demoted + reviews.filter((r, i) => r.box < (before[i] ?? 0)).length,
       }))
     } catch {
-      learning.addUnsaved(attempt, session.id)
+      learning.addUnsaved(attempt, session.id, isRetry ? undefined : { id: session.id, cursor: next.cursor, plannedItems, outcome })
       setSaveError(t.storage.unsaved)
     }
     setSession(next)
@@ -127,7 +159,7 @@ export function SessionScreen({ sessionId }: { sessionId: string }) {
   }
 
   async function advance(patch?: { outcome?: PracticeSession['outcomes'][number] }) {
-    if (!session) return
+    if (!session || busy.current || paused || saveError) return
     const cursor = Math.max(session.cursor, view + 1)
     const next = { ...session, cursor, updatedAt: Date.now(), outcomes: patch?.outcome ? [...session.outcomes.filter(o => o.index !== view), patch.outcome] : session.outcomes }
     setAnswer(null)
@@ -183,7 +215,7 @@ export function SessionScreen({ sessionId }: { sessionId: string }) {
       promoted: boxChanges.promoted, demoted: boxChanges.demoted,
     }
     const completed: PracticeSession = { ...final, status: 'completed', endedAt: Date.now(), summary }
-    try { await repository.saveSession(completed) } catch { setSaveError('練習結果無法儲存。') }
+    try { await repository.saveSession(completed) } catch { setSaveError('練習結果無法儲存，請再試一次。'); return }
     setSession(completed)
     await learning.refresh()
     // Ask for persistent storage after a meaningful gesture (finishing a session); never blocks practice.
@@ -197,14 +229,25 @@ export function SessionScreen({ sessionId }: { sessionId: string }) {
   const node = item.kind === 'question' ? nodeById(item.question.nodeId) : nodeById(item.nodeId)
   const needsAudio = item.kind === 'question' && !!item.question.audio && !audioIsOn()
 
-  return <div className="session">
+  const retryAnswer = () => {
+    if (!answer || busy.current || paused || saveError) return
+    setRetry({ firstAttemptId: answer.firstAttemptId, count: (retry?.count ?? 0) + 1 })
+    setAnswer(null); shownAt.current = performance.now()
+  }
+  actions.current = { next: () => { if (answer) void advance() }, retry: retryAnswer }
+  return <div className={`session ${instrument ? 'instrument-session' : 'pocket-session'}`}>
+    <div className="practice-mode-label">{instrument ? '持琴練習' : '通勤練習'} · {inputMode === 'play' && item.kind === 'question' && item.question.kind === 'fret-locate' ? '音高驗證' : '指板與音名回想'}</div>
     <div className="session-bar">
       <button type="button" className="icon-button" onClick={() => navigate('/')} aria-label="離開練習（之後可以繼續）">✕</button>
       {!openEnded && <div className="session-progress" role="progressbar" aria-valuemin={0} aria-valuemax={questionCount} aria-valuenow={answeredCount} aria-label="練習進度"><span style={{ width: `${progress * 100}%` }}/></div>}
+      <button type="button" className="secondary-button" onClick={() => { setPaused(!paused); stop(); shownAt.current = performance.now() }}>{paused ? '繼續練習' : '暫停'}</button>
+      <button type="button" className="text-button" disabled={busy.current || !!saveError} onClick={() => { if (!busy.current) void finish(session) }}>結束這次</button>
       <small>{openEnded ? `已答 ${answeredCount}` : `${answeredCount}/${questionCount}`}</small>
     </div>
+    {paused && <p className="notice" role="status">已暫停。進度會保留；繼續後可重新開始收音。</p>}
+    {instrument && <p className="helper shortcut-help">空白鍵：暫停／繼續 · Enter：下一題 · R：重試。控制項有焦點時使用其原本操作。</p>}
     <p className="session-context">{node?.title}{item.kind === 'question' && <> · <span>{item.reason}</span></>}</p>
-    {saveError && <div className="notice" role="alert">{saveError}{learning.unsaved.length > 0 && <div className="button-row">
+    {saveError && <div className="notice" role="alert">{saveError}{learning.unsaved.length === 0 && <button className="secondary-button" onClick={() => setSaveError('')}>重新嘗試</button>}{learning.unsaved.length > 0 && <div className="button-row">
       <button className="secondary-button" onClick={() => void learning.retryUnsaved().then(left => setSaveError(left ? t.storage.unsaved : ''))}>{t.storage.retry}</button>
       <button className="secondary-button" onClick={() => downloadJson(`guitar-lab-unsaved-${Date.now()}.json`, learning.unsaved)}>{t.storage.export}</button>
     </div>}</div>}
@@ -229,25 +272,27 @@ export function SessionScreen({ sessionId }: { sessionId: string }) {
       </div>
     </article>}
 
-    {item.kind === 'question' && <article className="card question-card">
-      <QuestionView key={`${item.question.id}-${retry?.count ?? 0}`} question={item.question} grade={answer?.grade ?? null} response={answer?.response ?? null} layout={learning.preferences.practiceLayout}
+    {item.kind === 'question' && <article className="card question-card" inert={paused || !!saveError}>
+      <QuestionView key={`${item.question.id}-${retry?.count ?? 0}`} question={item.question} grade={answer?.grade ?? null} response={answer?.response ?? null} layout={learning.preferences.practiceLayout} inputMode={inputMode}
         onSubmit={response => void submit(item.question, response)}/>
       {!answer && (retry
         ? <button type="button" className="text-button" onClick={() => void advance()}>不重試了，下一題 →</button>
         : <button type="button" className="text-button" onClick={() => void skip()}>{needsAudio ? '跳過這題（需要聲音，不扣分）' : '跳過（不扣分）'}</button>)}
       {answer && <div className={`feedback result-${answer.grade.result}`} role="status">
-        <strong>{answer.grade.result === 'correct' ? '✓ 正確' : answer.grade.result === 'partial' ? '◐ 部分正確' : '✕ 還不對'}</strong>
+        <strong>{answer.grade.result === 'correct' ? (answer.response.kind === 'played-note' ? '✓ 音高正確' : '✓ 正確') : answer.grade.result === 'partial' ? '◐ 部分正確' : '✕ 還不對'}</strong>
         <p>{answer.grade.feedback}</p>
         {answer.grade.result !== 'correct' && <p className="expected">正確答案：{answer.grade.expectedText}</p>}
         {offersWhy(item.question) && showWhy && <p className="explanation-text">{item.question.explanation}</p>}
         <div className="feedback-actions">
-          {answer.grade.result !== 'correct' && <button type="button" className="secondary-button" onClick={() => { setRetry({ firstAttemptId: answer.firstAttemptId, count: (retry?.count ?? 0) + 1 }); setAnswer(null); shownAt.current = performance.now() }}>{t.common.retry}</button>}
+          {answer.grade.result !== 'correct' && <button type="button" className="secondary-button" onClick={retryAnswer}>{t.common.retry}</button>}
           {offersWhy(item.question) && <button type="button" className="secondary-button" onClick={() => { setHoldAdvance(true); setShowWhy(!showWhy) }} aria-expanded={showWhy}>{showWhy ? t.common.hideWhy : t.common.why}</button>}
           {item.question.answerAudio && <button type="button" className="secondary-button" onClick={() => { setHoldAdvance(true); void play(item.question.answerAudio!) }}>▶ 聽答案</button>}
-          {holdAdvance && <button type="button" className="primary-button" onClick={() => void advance()}>{t.common.next} →</button>}
+          {<button type="button" className="primary-button" onClick={() => void advance()}>{t.common.next} →</button>}
         </div>
       </div>}
     </article>}
+    {inputMode === 'play' && item.kind === 'question' && item.question.kind === 'fret-locate' && <PlayListener disabled={!!answer || item.kind !== 'question' || item.question.kind !== 'fret-locate' || !!saveError} targetId={`${item.question.id}-${retry?.count ?? 0}`} paused={paused}
+      onNote={response => { if (item.kind === 'question') void submit(item.question, response) }} onFallback={() => setInputOverride('tap')}/>}
   </div>
 }
 
@@ -269,6 +314,7 @@ function SessionSummaryView({ session, boxChanges }: { session: PracticeSession;
     </ul>}
     {errors.length > 0 && <div className="summary-errors"><h3>這次常見的錯誤</h3><ul>{errors.map(([cls, n]) => <li key={cls}>{ERROR_LABEL[cls] ?? cls}：{n} 次</li>)}</ul></div>}
     {next && <div className="summary-next"><h3>建議下一步</h3><p><strong>{next.title}</strong> — {next.reason}</p></div>}
+    <DeviceTransfer/>
     <div className="button-row">
       {next?.nodeId && <button className="primary-button" onClick={() => navigate(`/learn/${next.nodeId}`)}>前往：{nodeById(next.nodeId)?.title}</button>}
       <button className="secondary-button" onClick={() => navigate('/')}>回到今日</button>

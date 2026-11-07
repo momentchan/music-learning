@@ -1,3 +1,4 @@
+import { useLearning } from '../../stores/learning'
 import { ChordDiagram } from '../../components/diagram/ChordDiagram'
 import { Fretboard } from '../../components/fretboard/Fretboard'
 import { PatternGrid } from '../../components/rhythm/RhythmPad'
@@ -6,17 +7,18 @@ import { shapeById, STANDARD } from '../../music-theory/guitar'
 
 /** Learn stage: definition, why it matters, worked example, visual, common mistake. */
 export function LessonContentView({ node, layout = 'vertical' }: { node: SkillNode; layout?: 'vertical' | 'horizontal' }) {
+  const leftHanded = useLearning(s => s.preferences.leftHanded)
   const c = node.content
   if (!c) return null
   return <div className="lesson-content">
     <section><h3>是什麼</h3><p>{c.definition}</p></section>
     <section><h3>為什麼重要</h3><p>{c.why}</p></section>
     {c.visual?.kind === 'fretboard' && <figure className="lesson-visual">
-      <Fretboard tuning={STANDARD.midi} orientation={layout} label={c.visual.caption} marks={c.visual.positions.map(([string, fret, label]) => ({ string, fret, label, tone: 'target' }))}/>
+      <Fretboard leftHanded={leftHanded} tuning={STANDARD.midi} orientation={layout} label={c.visual.caption} marks={c.visual.positions.map(([string, fret, label]) => ({ string, fret, label, tone: 'target' }))}/>
       <figcaption>{c.visual.caption}</figcaption>
     </figure>}
     {c.visual?.kind === 'shape' && <figure className="lesson-visual shapes">
-      <div className="shape-row">{c.visual.shapeIds.map(id => <ChordDiagram key={id} shape={shapeById(id)} size={130}/>)}</div>
+      <div className="shape-row">{c.visual.shapeIds.map(id => <ChordDiagram leftHanded={leftHanded} key={id} shape={shapeById(id)} size={130}/>)}</div>
       <figcaption>{c.visual.caption}</figcaption>
     </figure>}
     {c.visual?.kind === 'pattern' && <figure className="lesson-visual"><PatternGrid pattern={c.visual.pattern}/><figcaption>{c.visual.caption}</figcaption></figure>}

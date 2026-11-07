@@ -4,6 +4,9 @@ import { NODES, nodeById } from '../curriculum/nodes'
 import { itemLabel } from '../learning/labels'
 import { practiceDaysThisWeek, recommendations, weakItems } from '../learning/mastery'
 import { rankDueItems } from '../learning/scheduler'
+import { PracticeContextSetting } from '../components/PracticeContextSetting'
+import { AnswerInputSetting } from '../components/AnswerInputSetting'
+import { resumeListening } from '../audio/mic'
 import { audioIsOn } from '../stores/audioUi'
 import { useLearning } from '../stores/learning'
 
@@ -25,6 +28,7 @@ export function TodayScreen() {
   const activeRemaining = active ? active.plannedItems.slice(active.cursor).filter(i => i.kind === 'question').length : 0
 
   async function start() {
+    if (learning.preferences.answerInput === 'play') resumeListening()
     setStarting(true)
     try { navigate(`/session/${await learning.startGuided(audioIsOn())}`) }
     catch { setError('無法建立練習（本機儲存空間可能被封鎖）。') }
@@ -32,16 +36,18 @@ export function TodayScreen() {
   }
 
   return <div className="today">
-    {active && activeRemaining > 0 && <section className="card continue-card">
+    <PracticeContextSetting/>
+    {active && (activeRemaining > 0 || active.mode === 'guided') && <section className="card continue-card">
       <div><p className="eyebrow">繼續 CONTINUE</p><h2>{active.mode === 'guided' ? '接著上次的練習' : `上次的練習還剩 ${activeRemaining} 題`}</h2><p className="helper">{active.mode === 'lesson' ? nodeById(active.settings.nodeId ?? '')?.title : '離開不會丟掉進度。'}</p></div>
-      <button className="primary-button" onClick={() => navigate(`/session/${active.id}`)}>繼續 →</button>
+      <button className="primary-button" onClick={() => { if (learning.preferences.answerInput === 'play') resumeListening(); navigate(`/session/${active.id}`) }}>繼續 →</button>
     </section>}
 
     <section className="card start-card">
       <p className="eyebrow">今日練習 TODAY</p>
       <h2>{due.length ? `${due.length} 個項目到期複習` : learning.attempts.length ? '今天沒有到期的項目，學點新的吧' : '從六條弦的音名開始：第 6、5 弦以外也能說出來'}</h2>
-      <button className="primary-button wide big" disabled={starting} onClick={() => void start()}>▶ 開始練習</button>
-      <p className="helper">在指板上點一下就送出。做到不想練再離開，進度會留著。吉他的部分在「吉他」頁，回家再彈。</p>
+      <AnswerInputSetting/>
+      <button className={`${active ? 'secondary-button' : 'primary-button'} wide big`} disabled={starting || !learning.loaded} onClick={() => void start()}>{active ? '改練目前選的主題' : '▶ 開始練習'}</button>
+      <p className="helper">{learning.preferences.answerInput === 'play' ? '用吉他彈出題目要的音，麥克風會聽。做到不想練再離開，進度會留著。' : '在指板上點一下就送出。做到不想練再離開，進度會留著。持琴任務在「持琴練習」頁，回家再彈。'}</p>
       {error && <p className="notice" role="alert">{error}</p>}
     </section>
 
