@@ -226,8 +226,6 @@ for (const width of [390, 1280]) {
 
 test('one finding entry builds the same note, shuffles strings, then introduces another note without mode menus', async ({ page }) => {
   test.setTimeout(60000)
-  await page.goto('/settings')
-  await page.getByLabel('點選作答後前進').selectOption('manual')
   await page.goto('/')
   await page.getByRole('button', { name: /通勤練習.*點指板/ }).click()
   await page.getByLabel('這次練什麼').selectOption('notes')
@@ -244,9 +242,11 @@ test('one finding entry builds the same note, shuffles strings, then introduces 
     ;(i < 6 ? first : second).push(string)
     const midi = await requestedMidi(page)
     const open = [0,64,59,55,50,45,40][string]
+    const current = await page.locator('.question-prompt').elementHandle()
     await page.locator(`[data-cell="${string}-${midi - open}"]`).click()
     await expect.poll(async () => (await attempts(page)).length).toBe(i + 1)
-    await page.getByRole('button', { name: '下一題 →', exact: true }).click()
+    await expect(page.getByRole('button', { name: /^(再試一次|下一題 →)$/ })).toHaveCount(0)
+    await page.waitForFunction(el => !el?.isConnected, current)
   }
   expect(first).toEqual([6,5,4,3,2,1])
   expect(new Set(second).size).toBe(6)
@@ -319,3 +319,40 @@ for (const size of [{ width: 568, height: 320 }, { width: 844, height: 300 }, { 
     await context.close()
   })
 }
+
+
+for (const width of [390, 1280]) test(`tap answers at ${width}px retry and advance automatically even with an old manual preference`, async ({ page }) => {
+  await page.setViewportSize({ width, height: 844 })
+  await page.goto('/settings')
+  await expect(page.getByLabel('點選作答後前進')).toHaveCount(0)
+  await page.evaluate(async () => {
+    const db = await new Promise<IDBDatabase>(resolve => { const r = indexedDB.open('guitar-lab'); r.onsuccess = () => resolve(r.result) })
+    await new Promise<void>((resolve, reject) => {
+      const tx = db.transaction('settings', 'readwrite')
+      tx.objectStore('settings').put({ id: 'preferences', value: { practiceContext: 'pocket', advancePolicy: 'manual' } })
+      tx.oncomplete = () => resolve(); tx.onerror = () => reject(tx.error)
+    }); db.close()
+  })
+  await page.goto('/')
+  await page.getByLabel('這次練什麼').selectOption('notes')
+  await startPractice(page)
+  const prompt = await page.locator('.question-prompt').textContent()
+  await page.locator('[data-cell="1-0"]').click()
+  await expect(page.locator('.feedback strong')).toContainText('還不對')
+  await expect(page.getByRole('button', { name: /^(再試一次|下一題 →)$/ })).toHaveCount(0)
+  await expect(page.locator('.feedback')).toHaveCount(0)
+  await expect(page.locator('.question-prompt')).toHaveText(prompt!)
+  await expect(page.locator('[data-target-string="true"]')).toHaveAttribute('data-string', '6')
+  if (width < 700) await expect(page.getByRole('button', { name: '6–9 格', exact: true })).toHaveAttribute('aria-pressed', 'true')
+  const current = await page.locator('.question-prompt').elementHandle()
+  await page.locator('[data-cell="6-8"]').click()
+  await expect(page.locator('.feedback strong')).toContainText('正確')
+  await expect.poll(async () => (await attempts(page)).length).toBe(2)
+  const records = (await attempts(page)).sort((a, b) => Number(a.timestamp) - Number(b.timestamp))
+  expect(records[0]).toMatchObject({ correct: false, assisted: false })
+  expect(records[1]).toMatchObject({ correct: true, assisted: true, retryOf: records[0].id })
+  await page.waitForFunction(el => !el?.isConnected, current)
+  await expect(page.locator('[data-target-string="true"]')).toHaveAttribute('data-string', '5')
+  await expect(page.getByRole('button', { name: /^(再試一次|下一題 →)$/ })).toHaveCount(0)
+  await page.getByRole('button', { name: '結束這次', exact: true }).click()
+})

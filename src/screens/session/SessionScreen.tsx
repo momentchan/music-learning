@@ -31,6 +31,9 @@ export function SessionScreen({ sessionId }: { sessionId: string }) {
   const [hinted, setHinted] = useState(false)
   const [holdAdvance, setHoldAdvance] = useState(false)
   const [saveError, setSaveError] = useState('')
+  const [saving, setSaving] = useState(false)
+  const answerAudioTimer = useRef<number | undefined>(undefined)
+  const answerAudioGeneration = useRef(0)
   const [paused, setPaused] = useState(false)
   const [inputOverride, setInputOverride] = useState<'tap' | undefined>()
   const actions = useRef({ next: () => {}, retry: () => {} })
@@ -56,7 +59,7 @@ export function SessionScreen({ sessionId }: { sessionId: string }) {
     return () => { cancelled = true; stop() }
   }, [sessionId, stop])
 
-  useEffect(() => { shownAt.current = performance.now(); setShowWhy(false); setHoldAdvance(false); setRetry(null); setHinted(false) }, [view])
+  useEffect(() => { answerAudioGeneration.current++; window.clearTimeout(answerAudioTimer.current); shownAt.current = performance.now(); setShowWhy(false); setHoldAdvance(false); setRetry(null); setHinted(false) }, [view])
 
   // A reload can land past the last planned question. Fetch another batch instead of ending the session.
   useEffect(() => {
@@ -70,13 +73,15 @@ export function SessionScreen({ sessionId }: { sessionId: string }) {
     return () => { cancelled = true }
   }, [session, view])
 
-  // Show the marked fret briefly, then move on. A wrong answer stays longer so the correct position can be seen.
+  useEffect(() => () => { answerAudioGeneration.current++; window.clearTimeout(answerAudioTimer.current) }, [])
+
+  // Both input methods advance after success and retry the same question after a miss.
   useEffect(() => {
-    if (paused || saveError || !answer || answer.grade.result !== 'correct' || (learning.preferences.advancePolicy === 'manual' && answer.response.kind !== 'played-note') || holdAdvance || !session || session.status === 'completed' || session.cursor <= view) return
-    const delay = answer.response.kind === 'played-note' ? 1500 : 900
+    if (paused || saving || saveError || !answer || answer.grade.result !== 'correct' || showWhy || holdAdvance || !session || session.status === 'completed' || session.cursor <= view) return
+    const delay = 1500
     const timer = window.setTimeout(() => advanceRef.current(), delay)
     return () => window.clearTimeout(timer)
-  }, [answer, holdAdvance, session, view, learning.preferences.advancePolicy, paused, saveError])
+  }, [answer, holdAdvance, showWhy, session, view, paused, saving, saveError])
 
   useEffect(() => {
     const hide = () => { if (document.hidden) { setPaused(true); stop() } }
@@ -93,10 +98,10 @@ export function SessionScreen({ sessionId }: { sessionId: string }) {
   }, [stop])
 
   useEffect(() => {
-    if (paused || saveError || !answer || answer.response.kind !== 'played-note' || answer.grade.result === 'correct') return
+    if (paused || saving || saveError || holdAdvance || showWhy || !answer || !session || session.status === 'completed' || answer.grade.result === 'correct') return
     const timer = window.setTimeout(() => actions.current.retry(), 1400)
     return () => window.clearTimeout(timer)
-  }, [answer, paused, saveError])
+  }, [answer, paused, saving, saveError, holdAdvance, showWhy, session])
 
   useEffect(() => { if (!paused) shownAt.current = performance.now() }, [paused])
 
@@ -114,6 +119,7 @@ export function SessionScreen({ sessionId }: { sessionId: string }) {
   async function submit(question: Question, response: Response) {
     if (busy.current || paused || saveError || !session) return
     busy.current = true
+    setSaving(true)
     if (response.kind === 'played-note' && question.kind === 'fret-locate') question = playedQuestion(question)
     const grade = validate(question, response)
     const microphone = response.kind === 'played-note'
@@ -163,6 +169,7 @@ export function SessionScreen({ sessionId }: { sessionId: string }) {
     }
     setSession(next)
     busy.current = false
+    setSaving(false)
   }
 
   async function advance(patch?: { outcome?: PracticeSession['outcomes'][number] }) {
@@ -239,7 +246,8 @@ export function SessionScreen({ sessionId }: { sessionId: string }) {
   const retryAnswer = () => {
     if (!answer || busy.current || paused || saveError) return
     setRetry({ firstAttemptId: answer.firstAttemptId, count: (retry?.count ?? 0) + 1 })
-    setAnswer(null); setHinted(false); shownAt.current = performance.now()
+    answerAudioGeneration.current++; window.clearTimeout(answerAudioTimer.current)
+    setAnswer(null); setHinted(false); setHoldAdvance(false); setShowWhy(false); shownAt.current = performance.now()
   }
   actions.current = { next: () => { if (answer) void advance() }, retry: retryAnswer }
   return <div className={`session ${instrument ? 'instrument-session' : 'pocket-session'}`}>
@@ -279,21 +287,23 @@ export function SessionScreen({ sessionId }: { sessionId: string }) {
     </article>}
 
     {item.kind === 'question' && <article className="card question-card" inert={paused || !!saveError}>
-      <QuestionView key={`${item.question.id}-${retry?.count ?? 0}`} question={item.question} grade={answer?.grade ?? null} response={answer?.response ?? null} inputMode={inputMode} hinted={hinted} onHint={() => setHinted(true)}
+      <QuestionView key={`${item.question.id}-${['construct', 'rhythm'].includes(item.question.kind) ? retry?.count ?? 0 : 0}`} question={item.question} grade={answer?.grade ?? null} response={answer?.response ?? null} inputMode={inputMode} hinted={hinted} onHint={() => setHinted(true)}
         onSubmit={response => void submit(item.question, response)}/>
-      {!answer && (retry
-        ? <button type="button" className="text-button" onClick={() => void advance()}>不重試了，下一題 →</button>
-        : <button type="button" className="text-button" onClick={() => void skip()}>{needsAudio ? '跳過這題（需要聲音，不扣分）' : '跳過（不扣分）'}</button>)}
+      {!answer && <button type="button" className="text-button" onClick={() => { if (retry) void advance(); else void skip() }}>{needsAudio ? '跳過這題（需要聲音，不扣分）' : '跳過（不扣分）'}</button>}
       {answer && <div className={`feedback result-${answer.grade.result}`} role="status">
         <strong>{answer.grade.result === 'correct' ? (answer.response.kind === 'played-note' ? '✓ 音高正確' : '✓ 正確') : answer.grade.result === 'partial' ? '◐ 部分正確' : '✕ 還不對'}{hinted ? '（有提示）' : ''}</strong>
         {(answer.response.kind !== 'played-note' || answer.grade.result !== 'correct') && <p>{answer.grade.feedback}</p>}
         {answer.grade.result !== 'correct' && answer.response.kind !== 'played-note' && <p className="expected">正確答案：{answer.grade.expectedText}</p>}
         {offersWhy(item.question) && showWhy && <p className="explanation-text">{item.question.explanation}</p>}
-        {answer.response.kind !== 'played-note' && <div className="feedback-actions">
-          {answer.grade.result !== 'correct' && <button type="button" className="secondary-button" onClick={retryAnswer}>{t.common.retry}</button>}
-          {offersWhy(item.question) && <button type="button" className="secondary-button" onClick={() => { setHoldAdvance(true); setShowWhy(!showWhy) }} aria-expanded={showWhy}>{showWhy ? t.common.hideWhy : t.common.why}</button>}
-          {item.question.answerAudio && <button type="button" className="secondary-button" onClick={() => { setHoldAdvance(true); void play(item.question.answerAudio!) }}>▶ 聽答案</button>}
-          {<button type="button" className="primary-button" onClick={() => void advance()}>{t.common.next} →</button>}
+        {answer.response.kind !== 'played-note' && (offersWhy(item.question) || item.question.answerAudio) && <div className="feedback-actions">
+          {offersWhy(item.question) && <button type="button" className="secondary-button" onClick={() => { setShowWhy(!showWhy) }} aria-expanded={showWhy}>{showWhy ? t.common.hideWhy : t.common.why}</button>}
+          {item.question.answerAudio && <button type="button" className="secondary-button" onClick={() => {
+            window.clearTimeout(answerAudioTimer.current)
+            const generation = ++answerAudioGeneration.current
+            setHoldAdvance(true)
+            const audio = item.question.answerAudio!
+            void play(audio).then(() => { if (generation !== answerAudioGeneration.current) return; answerAudioTimer.current = window.setTimeout(() => setHoldAdvance(false), audio.reduce((sum, event) => sum + event.duration, 0) * 1000 + 500) })
+          }}>▶ 聽答案</button>}
         </div>}
       </div>}
     </article>}

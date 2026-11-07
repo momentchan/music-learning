@@ -92,6 +92,7 @@ export type PracticeFocus = 'notes' | 'naming' | 'positions' | 'intervals' | 'ch
 export interface Preferences {
   practiceFocus: PracticeFocus
   practiceContext: 'pocket' | 'instrument'
+  /** Legacy backup compatibility; practice always retries/advances automatically. */
   advancePolicy: 'auto' | 'manual'
   weeklyGoalDays: number
   difficulty: 'auto' | 1 | 2 | 3

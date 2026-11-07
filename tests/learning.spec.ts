@@ -1,4 +1,6 @@
 import { expect, test, type Page } from '@playwright/test'
+import type { Question } from '../src/exercise-engine/types'
+import { locateTargets } from '../src/exercise-engine/validate'
 
 test.beforeEach(async ({ page }) => {
   await page.goto('/')
@@ -23,24 +25,34 @@ async function answerCurrent(page: Page): Promise<boolean> {
     await page.waitForFunction(element => !element?.isConnected, button)
     return true
   }
-  const pitch = page.locator('.pitch-picker button').first()
-  const cell = page.locator('.fret-cell.interactive').first()
-  const choice = page.locator('.question-card .choice-grid button').first()
-  if (await pitch.isVisible().catch(() => false)) await pitch.click()
-  else if (await cell.isVisible().catch(() => false)) {
+  const question = await page.evaluate(async () => {
+    const id = decodeURIComponent(location.pathname.split('/').pop()!)
+    const db = await new Promise<IDBDatabase>(resolve => { const r = indexedDB.open('guitar-lab'); r.onsuccess = () => resolve(r.result) })
+    const session = await new Promise<{ cursor: number; plannedItems: { question: Question }[] }>(resolve => { const r = db.transaction('sessions').objectStore('sessions').get(id); r.onsuccess = () => resolve(r.result) })
+    db.close(); return session.plannedItems[session.cursor].question
+  })
+  if (question.kind === 'fret-identify') await page.locator('.pitch-picker button').nth(question.answerPc).click()
+  else if (question.kind === 'fret-locate') {
+    const target = locateTargets(question)[0]
+    const cell = page.locator(`.fret-cell.interactive[data-cell="${target.string}-${target.fret}"]`)
+    if (!await cell.isVisible()) {
+      const low = Math.min(9, Math.floor(target.fret / 3) * 3)
+      await page.getByRole('button', { name: `${low}–${low + 3} 格`, exact: true }).click()
+    }
     await cell.focus()
-    await page.keyboard.press('ArrowRight')
     await page.keyboard.press('Enter')
-  } else if (await choice.isVisible().catch(() => false)) await choice.click()
-  else {
-    const letter = page.locator('.picker-letters button').first()
-    const slots = await page.locator('.picker-slots span').count()
-    for (let i = 0; i < slots; i++) await letter.click()
+  } else if (question.kind === 'choice') await page.locator('.question-card .choice-grid').getByRole('button', { name: question.answer, exact: true }).click()
+  else if (question.kind === 'construct') {
+    for (const note of question.expected) {
+      if (note.endsWith('#')) await page.getByRole('radio', { name: '升記號', exact: true }).click()
+      else if (note.endsWith('b')) await page.getByRole('radio', { name: '降記號', exact: true }).click()
+      await page.locator('.picker-letters button').filter({ hasText: note[0] }).click()
+    }
     await page.getByRole('button', { name: '送出' }).click()
-  }
+  } else throw new Error(`Unsupported test question: ${question.kind}`)
   await expect(page.getByRole('status').filter({ hasText: /正確|還不對|部分正確/ })).toBeVisible()
   const currentQuestion = await page.locator('.question-prompt').elementHandle()
-  if (await page.getByRole('status').filter({ hasText: /還不對|部分正確/ }).isVisible().catch(() => false)) await page.getByRole('button', { name: '下一題 →', exact: true }).click()
+  await expect(page.getByRole('button', { name: /^(再試一次|下一題 →)$/ })).toHaveCount(0)
   await page.waitForFunction(element => !element?.isConnected, currentQuestion, { timeout: 4000 })
   return true
 }
@@ -80,7 +92,11 @@ test('wrong answers get specific feedback, a retry, and a later recheck', async 
   await page.locator(`.fret-cell.interactive[data-cell="${other}-1"]`).click()
   await expect(page.getByRole('status').filter({ hasText: '還不對' })).toBeVisible()
   const total = Number((await page.locator('.session-bar small').textContent())!.split('/')[1])
-  await page.getByRole('button', { name: '再試一次' }).click()
+  await expect(page.getByRole('button', { name: /^(再試一次|下一題 →)$/ })).toHaveCount(0)
+  await page.getByRole('button', { name: '暫停', exact: true }).click()
+  await page.waitForTimeout(1700)
+  await expect(page.getByRole('status').filter({ hasText: '還不對' })).toBeVisible()
+  await page.getByRole('button', { name: '繼續練習', exact: true }).click()
   await expect(page.locator('.fret-cell.interactive').first()).toBeVisible()
   await expect(page.getByRole('status').filter({ hasText: '還不對' })).toHaveCount(0)
   await expect(page.locator('.session-bar small')).toHaveText(`1/${total}`)

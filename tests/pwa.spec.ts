@@ -80,6 +80,7 @@ test('an update activated by another tab waits for practice to finish or leave b
     await page.getByRole('button', { name: '▶ 開始練習' }).click()
     await page.locator('.fret-cell.interactive').first().click()
     await expect(page.locator('.feedback strong')).toContainText('還不對')
+    await page.getByRole('button', { name: '暫停', exact: true }).click()
     const boots = await page.evaluate(() => Number(sessionStorage.getItem('boots')))
     const question = await page.locator('.question-prompt').textContent()
     site.deploy()

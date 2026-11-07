@@ -92,7 +92,6 @@ export function SettingsScreen() {
       <label>每週目標天數<select value={preferences.weeklyGoalDays} onChange={e => set({ weeklyGoalDays: Number(e.target.value) })}>{[2, 3, 4, 5, 6, 7].map(d => <option key={d} value={d}>{d} 天</option>)}</select></label>
       <label>難度<select value={String(preferences.difficulty)} onChange={e => set({ difficulty: e.target.value === 'auto' ? 'auto' : Number(e.target.value) as 1 | 2 | 3 })}>
         <option value="auto">自動（依你的正確率調整）</option><option value="1">1 · 入門</option><option value="2">2 · 進階</option><option value="3">3 · 挑戰</option></select></label>
-      <label>點選作答後前進<select value={preferences.advancePolicy} onChange={e => set({ advancePolicy: e.target.value as 'auto' | 'manual' })}><option value="auto">正確時自動，錯誤時停下</option><option value="manual">每題手動前進</option></select></label>
       <div className="setting"><div><strong>左手琴</strong><p>把指板左右鏡像</p></div><input type="checkbox" checked={preferences.leftHanded} onChange={e => set({ leftHanded: e.target.checked })} aria-label="左手琴顯示"/></div>
       <p className="helper">語言：繁體中文（之後會加入 English、日本語）。調音：標準調音（其他調音規劃中）。</p>
     </section>
