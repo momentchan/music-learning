@@ -5,7 +5,7 @@ import type { Difficulty } from '../exercise-engine/types'
 import { computeNodeMastery, nextPathwayNode, recommendations, weakItems } from './mastery'
 import type { ExerciseAttempt } from './records'
 import { DAY, RECHECK_MS, SCHEDULER_VERSION, applyReview, rankDueItems, replayHistory, type ReviewState } from './scheduler'
-import { buildGuidedSession, buildLesson, insertRecheck, interleave, withoutDegreePositionQuestions } from './sessions'
+import { buildGuidedSession, buildLesson, insertRecheck, interleave, intervalPracticeDifficulty, withoutDegreePositionQuestions } from './sessions'
 
 const T0 = Date.UTC(2026, 10, 2, 9) // a Monday
 const ev = (correct: boolean, timestamp: number, assisted = false, itemId = 'x') => ({ itemId, correct, assisted, timestamp })
@@ -162,15 +162,15 @@ describe('session planning', () => {
     const plan = buildGuidedSession({ seed: 9, now: T0, audio: true, reviews: new Map(), mastery: new Map(), preference: 'auto' })
     const questions = plan.filter(p => p.kind === 'question')
     expect(plan[0]).toEqual({ kind: 'learn', nodeId: 'fret.naturals.all' })
-    expect(questions).toHaveLength(8)
+    expect(questions).toHaveLength(6)
     expect(questions.every(p => p.kind === 'question' && p.question.kind === 'fret-locate')).toBe(true)
-    expect(questions.filter(p => p.kind === 'question' && p.question.nodeId === 'fret.naturals.all')).toHaveLength(8)
+    expect(questions.filter(p => p.kind === 'question' && p.question.nodeId === 'fret.naturals.all')).toHaveLength(6)
     expect(questions.some(p => p.kind === 'question' && (p.question.nodeId === 'scale.major' || p.question.nodeId === 'key.diatonic' || p.question.prompt.includes('級')))).toBe(false)
     expect(questions.some(p => p.kind === 'question' && (p.question.nodeId === 'fret.octaves' || p.question.prompt.includes('高一個八度') || p.question.kind === 'choice' || p.question.kind === 'construct'))).toBe(false)
     expect(plan.some(p => p.kind === 'bridge')).toBe(false)
     const continued = buildGuidedSession({ seed: 9, now: T0, audio: true, reviews: new Map(), mastery: new Map(), preference: 'auto', intro: false })
     expect(continued.some(p => p.kind === 'learn' || p.kind === 'bridge')).toBe(false)
-    expect(continued.filter(p => p.kind === 'question')).toHaveLength(8)
+    expect(continued.filter(p => p.kind === 'question')).toHaveLength(6)
   })
   it('leaves ear questions out when sound is off', () => {
     const plan = buildGuidedSession({ seed: 9, now: T0, audio: false, reviews: new Map(), mastery: new Map(), preference: 'auto' })
@@ -179,13 +179,12 @@ describe('session planning', () => {
     expect(questions.every(p => p.kind === 'question' && p.question.kind === 'fret-locate')).toBe(true)
     expect(questions.some(p => p.kind === 'question' && (p.question.nodeId === 'scale.major' || p.question.prompt.includes('級')))).toBe(false)
   })
-  it('guided session puts due reviews first, targeted at the due items', () => {
+  it('unintroduced due items do not interrupt the first same-note round', () => {
     const reviews = new Map(['fret.note.C.s5', 'fret.note.G.s6', 'fret.octave.s6-s4', 'interval.M3'].map(id => [id, applyReview(undefined, ev(false, T0 - DAY, false, id))]))
-    const plan = buildGuidedSession({ seed: 2, now: T0, audio: false, reviews, mastery: new Map(), preference: 'auto' })
-    const ids = plan.flatMap(p => p.kind === 'question' ? p.question.reviewItemIds : [])
-    expect(ids).toEqual(expect.arrayContaining(['fret.note.C.s5', 'fret.note.G.s6']))
-    expect(ids.some(id => id.startsWith('fret.octave.') || id === 'interval.M3')).toBe(false)
-    expect(plan.filter(p => p.kind === 'question').slice(0, 2).flatMap(p => p.kind === 'question' ? p.question.reviewItemIds : [])).toEqual(expect.arrayContaining(['fret.note.C.s5', 'fret.note.G.s6']))
+    const plan = buildGuidedSession({ seed: 2, now: T0, audio: false, reviews, mastery: new Map(), preference: 'auto', intro: false })
+    expect(plan).toHaveLength(6)
+    expect(plan.every(p => p.kind === 'question' && p.question.kind === 'fret-locate' && p.question.targetPc === 0)).toBe(true)
+    expect(plan.flatMap(p => p.kind === 'question' ? p.question.reviewItemIds : [])).toEqual([6, 5, 4, 3, 2, 1].map(s => `fret.note.C.s${s}`))
   })
   it('keeps scale degrees out of the fretboard taps', () => {
     const lesson = buildLesson({ nodeId: 'scale.major', seed: 1, difficulty: 1, audio: false })
@@ -235,4 +234,20 @@ it('using a hint does not count as independent recall evidence', () => {
   const state = computeNodeMastery('fret.open', hinted, new Map(), [], T0 + 13 * DAY)
   expect(state.samples).toBe(0)
   expect(state.state).toBe('new')
+})
+
+
+it('interval pitch practice advances its own difficulty without granting location mastery', () => {
+  const base = { seed: 1, now: T0, audio: false, reviews: new Map(), mastery: new Map(), preference: 'auto' as const, practiceContext: 'instrument' as const }
+  const first = Array.from({ length: 6 }, (_, i) => ({ ...attempt('interval.shapes', true, T0 + i), inputMethod: 'microphone' as const, practiceContext: 'instrument' as const, reviewItemIds: [], itemResults: {} }))
+  expect(intervalPracticeDifficulty(base)).toBe(1)
+  expect(intervalPracticeDifficulty({ ...base, attempts: first })).toBe(2)
+  expect(intervalPracticeDifficulty({ ...base, attempts: first, practiceContext: 'pocket' })).toBe(1)
+  expect(intervalPracticeDifficulty({ ...base, attempts: first.map(a => ({ ...a, assisted: true })) })).toBe(1)
+  const second = first.map((a, i) => ({ ...a, id: `second-${i}`, difficulty: 2, timestamp: T0 + 10 + i }))
+  expect(intervalPracticeDifficulty({ ...base, attempts: [...first, ...second] })).toBe(3)
+  expect(intervalPracticeDifficulty({ ...base, attempts: [...first, ...second], preference: 1 })).toBe(1)
+  expect(computeNodeMastery('interval.shapes', [...first, ...second], new Map(), [], T0).samples).toBe(0)
+  const plan = buildGuidedSession({ ...base, attempts: first, focus: 'intervals' })
+  expect(plan.every(p => p.kind === 'question' && p.question.difficulty === 2)).toBe(true)
 })

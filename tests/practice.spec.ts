@@ -1,7 +1,7 @@
 import { expect, test, type Page } from '@playwright/test'
 
 async function startPractice(page: Page) {
-  await page.getByRole('button', { name: '▶ 開始練習' }).click()
+  await page.getByRole('button', { name: /^(▶ 開始練習|開始新一輪)$/ }).click()
   await expect(page.locator('.lesson-card, .question-prompt').first()).toBeVisible()
   const intro = page.getByRole('button', { name: /懂了，開始練習/ })
   if (await intro.isVisible()) await intro.click()
@@ -209,3 +209,50 @@ for (const width of [390, 1280]) {
     await expect(board.locator('.svg-note')).toContainText('?')
   })
 }
+
+
+test('one finding entry builds the same note, shuffles strings, then introduces another note without mode menus', async ({ page }) => {
+  test.setTimeout(60000)
+  await page.goto('/settings')
+  await page.getByLabel('點選作答後前進').selectOption('manual')
+  await page.goto('/')
+  await page.getByRole('button', { name: /通勤練習.*點指板/ }).click()
+  await page.getByLabel('這次練什麼').selectOption('notes')
+  await startPractice(page)
+  const first: number[] = [], second: number[] = []
+  for (let i = 0; i < 12; i++) {
+    if (i === 3) {
+      const prompt = await page.locator('.question-prompt').textContent()
+      await page.reload()
+      await expect(page.locator('.question-prompt')).toHaveText(prompt!)
+    }
+    await expect(page.locator('.question-prompt')).toContainText('C')
+    const string = Number(await page.locator('.question-card [data-target-string="true"]').getAttribute('data-string'))
+    ;(i < 6 ? first : second).push(string)
+    const midi = await requestedMidi(page)
+    const open = [0,64,59,55,50,45,40][string]
+    await page.locator(`[data-cell="${string}-${midi - open}"]`).click()
+    await expect.poll(async () => (await attempts(page)).length).toBe(i + 1)
+    await page.getByRole('button', { name: '下一題 →', exact: true }).click()
+  }
+  expect(first).toEqual([6,5,4,3,2,1])
+  expect(new Set(second).size).toBe(6)
+  expect(second).not.toEqual(first)
+  await expect(page.locator('.question-prompt')).toContainText('G')
+  const records = (await attempts(page)).sort((a, b) => Number(a.timestamp) - Number(b.timestamp))
+  expect(records.slice(0, 6).every(a => (a.question as { practiceStage: string }).practiceStage === 'map')).toBe(true)
+  expect(records.slice(6).every(a => (a.question as { practiceStage: string }).practiceStage === 'shuffle')).toBe(true)
+  await page.getByRole('button', { name: '結束這次', exact: true }).click()
+})
+
+
+test('phone interval practice keeps the reference root visible in its local window', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 })
+  await page.goto('/')
+  await page.getByRole('button', { name: /通勤練習.*點指板/ }).click()
+  await page.getByLabel('這次練什麼').selectOption('intervals')
+  await startPractice(page)
+  await expect(page.locator('.local-board .svg-note')).toHaveCount(1)
+  await expect(page.locator('.local-board .svg-note')).toContainText('R')
+  await expect(page.locator('.local-board .svg-fret-label')).toHaveCount(4)
+})

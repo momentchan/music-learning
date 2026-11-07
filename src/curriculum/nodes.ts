@@ -150,12 +150,12 @@ const T1: SkillNode[] = [
     bridge: { id: 'bridge.interval.basics', minutes: 2, text: '在第 5 弦第 3 格彈 C，然後在同一條弦往上 3 格（E♭，小三度）與 4 格（E，大三度）各彈一次，比較兩者的聲音。' },
   },
   {
-    id: 'interval.shapes', tier: 1, title: '指板上的音程形狀 Interval Shapes', summary: '相鄰弦上的二度、三度、四度、五度形狀。',
-    prerequisites: ['interval.basics', 'fret.naturals.all'], canDo: ['從任一根音，在相鄰的高音弦找到 M3、m3、P4、P5'], availability: 'available', estimatedMinutes: 4, related: ['triad.stringsets'],
+    id: 'interval.shapes', tier: 1, title: '指板上的音程形狀 Interval Shapes', summary: '從二度到八度，使用相鄰弦與隔弦的實用位置。',
+    prerequisites: ['interval.basics', 'fret.naturals.all'], canDo: ['從根音找出二至八度，並處理跨 G–B 弦的形狀差異'], availability: 'available', estimatedMinutes: 4, related: ['triad.stringsets'],
     content: {
-      definition: '相鄰弦大多相差完全四度（5 個半音），所以同一格的上一條弦是 P4，往高把位 2 格是 P5，往低把位 1 格是 M3、2 格是 m3。G–B 弦只差大三度，所以形狀要往高把位多移一格。',
+      definition: '相鄰弦大多相差完全四度（5 個半音），所以同一格的上一條弦是 P4，往高把位 2 格是 P5，往低把位 1 格是 M3、2 格是 m3。G–B 弦只差大三度，所以形狀要往高把位多移一格。六度到八度改用隔一條弦的位置，減少左手伸展。',
       why: '用形狀思考比一個一個數半音快得多。和弦與音階在指板上的樣子都是這些形狀組合起來的。',
-      example: '根音在第 5 弦第 3 格（C）：大三度 E 在第 4 弦第 2 格；完全五度 G 在第 4 弦第 5 格。',
+      example: '根音在第 5 弦第 3 格（C）：大三度 E 在第 4 弦第 2 格；完全五度 G 在第 4 弦第 5 格；大六度 A 在第 3 弦第 2 格，小七度 B♭ 在第 3 弦第 3 格，八度 C 在第 3 弦第 5 格。',
       mistake: '在第 3 → 2 弦用和其他弦一樣的形狀，結果低了半音。',
     },
     bridge: { id: 'bridge.interval.shapes', minutes: 2, text: '第 6 弦第 5 格（A）+ 第 5 弦第 7 格（E）一起彈：這是完全五度（強力和弦）。保持形狀往上移，換到第 5、4 弦再試一次。' },

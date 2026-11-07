@@ -32,6 +32,14 @@ The old `/guitar` link opens the same practice hub in guitar mode; `/lab/ear` re
 
 Microphone input now shows an independent volume meter and detected note. Starting guitar practice automatically uses microphone input for supported questions; there is no second input-method menu. The first note after starting practice can be graded without first waiting for silence. Between answers, release the previous note before replaying. Quiet-input detection was lowered from RMS 0.02 to 0.0015, while periodicity confidence and pitch stability still guard grading. Permission errors and low input levels are visible, with restart and device selection when multiple actual microphones exist. These changes are tested with quiet synthetic streams; real built-in microphone performance still requires the user to play and check the meter.
 
+## Progressive finding and complete intervals
+
+Finding notes remains one topic with no additional mode selector. New notes start across strings 6 → 1, then repeat with shuffled strings. Each string needs an independent correct answer; hints, immediate retries and skipped positions do not complete that step. Unresolved strings return before the next step. The note order is C, G, D, A, E, B, F, then F♯, C♯, G♯, D♯, A♯. Completed notes gradually join review, with recent misses and overdue positions prioritized. Phone and guitar histories steer their own practice sequence; pitch answers still never grant position mastery. The serialized questions and history preserve the route across reloads and sessions.
+
+Each question requests an exact octave. Open strings appear first and their fret-12 octaves appear in the shuffled round, covering all positions from fret 0 to 12 across the full sequence. After the twelve notes, practice continues with mixed review.
+
+Interval shapes now cover m2, M2, m3, M3, P4, A4 (tritone), P5, m6, M6, m7, M7 and P8. Entry level retains thirds/fourths/fifths; level 2 adds seconds/sixths/octaves; level 3 adds sevenths/tritone. Automatic progression needs at least five independent successes in the latest six answers at each preceding level, separately per practice context. This steers practice difficulty, not verified position mastery. Fixed difficulty remains available. Sixths through octaves skip one string, keeping fret differences within three and handling the G–B tuning shift. Previously saved questions retain their original positions.
+
 ## Current release: pocket practice and at-the-guitar practice
 
 Choose **通勤練習** or **彈吉他**, then pick note locations, note naming, adjacent-string intervals, or chord tones. On the phone, answer on a large local fret window; on the computer, use the full player-view neck. Context is suggested by screen size only on first use and stays under your control.
@@ -49,7 +57,7 @@ Implementation notes and remaining manual checks: [PRACTICE_IMPLEMENTATION.md](P
 ## Functional status
 
 ### Functional
-- **Today screen:** one Start practice button. Continuous sessions keep offering the selected practice topic until the learner leaves, with compatible due reviews first. Scale degrees are a separate lesson, not mixed into those taps. The guitar task is queued for later. Recommendations include reasons, the weekly goal has no streak penalty, and weak items are listed.
+- **Today screen:** one Start practice button. Continuous sessions keep offering the selected practice topic until the learner leaves, with same-note string mapping followed by shuffled recall and reviews of learned notes. Scale degrees are a separate lesson, not mixed into those taps. The guitar task is queued for later. Recommendations include reasons, the weekly goal has no streak penalty, and weak items are listed.
 - **Learn screen:** a three-tier skill graph and six pathways. The default ★ Start Here is for someone who already accompanies with barre chords: notes on every string, accidentals, interval shapes, the major scale, diatonic chords, then function. Open strings, open-chord shapes, and basic strumming sit on an optional review path. Octave-shape drills are not scheduled. Daily questions are answered on the fretboard. Availability labels stay honest, and any node can still be opened freely.
 - **Lessons:** lessons combine explanation, location, recall, supported audio/application exercises, and a bridge task; note lessons include both finding and naming. All 16 Tier 1 nodes that have exercises are available:
   - open strings

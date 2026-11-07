@@ -1,11 +1,12 @@
 /** Pure session planning (spec §3.1, §9.2). Questions are generated up front and stored, so resume replays them exactly. */
-import { PATHWAYS, nodeById } from '../curriculum/nodes'
-import { templatesForItem, templatesForNode } from '../exercise-engine/registry'
+import { nodeById } from '../curriculum/nodes'
+import { templatesForNode } from '../exercise-engine/registry'
 import type { Difficulty, ExerciseTemplate } from '../exercise-engine/types'
-import { createRng, deriveSeed, pick, shuffle } from '../lib/rng'
+import { createRng, deriveSeed, shuffle } from '../lib/rng'
 import type { NodeMastery } from './mastery'
-import type { PlannedItem, PracticeSession, PracticeFocus } from './records'
+import type { PlannedItem, PracticeSession, PracticeFocus, ExerciseAttempt } from './records'
 import { rankDueItems, type ReviewState } from './scheduler'
+import { buildNotePractice } from './notePractice'
 
 /** One commute batch. Another batch is appended when this one runs out, until the learner leaves. */
 export const GUIDED_BATCH = 8
@@ -22,8 +23,7 @@ export function adaptiveDifficulty(mastery: NodeMastery | undefined, preference:
 
 const usable = (t: ExerciseTemplate, audio: boolean) => audio || !t.requiresAudio
 
-/** Phone practice along Start Here. Answers are taps on the fretboard. Scale degrees stay in their own lesson. */
-const COMMUTE_NECK = ['fret.naturals.all', 'fret.accidentals', 'interval.shapes']
+/** Scale degrees stay in their own topic instead of mixing into note finding. */
 const DEGREE_NODES = ['scale.major', 'key.diatonic']
 
 /** A degree question that also asks for a string and fret. That mix is not used. */
@@ -47,11 +47,6 @@ export function withoutDegreePositionQuestions<T extends Pick<PracticeSession, '
     return index === -1 ? [] : [{ ...outcome, index }]
   })
   return { ...session, plannedItems, cursor, outcomes }
-}
-
-/** Octave-shape drills are retired. Text-only questions and degree-finding are not used in the commute session. */
-function onFretboard(template: ExerciseTemplate): boolean {
-  return template.kind === 'fret-locate' && !template.id.endsWith('.window') && COMMUTE_NECK.includes(template.nodeId)
 }
 
 function questionItem(template: ExerciseTemplate, seed: number, difficulty: Difficulty, reason: string, itemId?: string): PlannedItem {
@@ -126,12 +121,30 @@ export interface GuidedOptions {
   preference: 'auto' | Difficulty
   focus?: PracticeFocus
   pathwayId?: string
+  attempts?: ExerciseAttempt[]
+  practiceContext?: 'pocket' | 'instrument'
   /** First batch shows the learn card. Later batches are questions only. */
   intro?: boolean
 }
 
+/** Difficulty can steer pitch practice without turning it into position mastery. */
+export function intervalPracticeDifficulty(options: GuidedOptions): Difficulty {
+  if (options.preference !== 'auto') return options.preference
+  const context = options.practiceContext ?? 'pocket'
+  const attempts = (options.attempts ?? []).filter(a => a.nodeId === 'interval.shapes' && !a.assisted && !a.retryOf &&
+    (a.practiceContext ?? (a.inputMethod === 'microphone' ? 'instrument' : 'pocket')) === context)
+    .sort((a, b) => a.timestamp - b.timestamp)
+  let level: Difficulty = 1
+  for (const difficulty of [1, 2] as const) {
+    const recent = attempts.filter(a => a.difficulty === difficulty).slice(-6)
+    if (recent.length < 6 || recent.filter(a => a.correct).length < 5) break
+    level = (difficulty + 1) as Difficulty
+  }
+  return level
+}
+
 /**
- * Commute session: due fretboard reviews, then more note-finding on the neck.
+ * Note practice builds one pitch class across strings before shuffled and mixed recall.
  * Scale degrees are a separate lesson. They are not mixed into these taps.
  * The batch keeps going until the learner leaves. The guitar task is queued, not played here.
  */
@@ -146,53 +159,14 @@ export function buildGuidedSession(options: GuidedOptions): PlannedItem[] {
     const due = rankDueItems(options.reviews.values(), options.now).filter(r => templates.some(t => t.items().includes(r.itemId))).slice(0, 4)
     return Array.from({ length: GUIDED_BATCH }, (_, i) => {
       const t = templates[i % templates.length]
-      return questionItem(t, deriveSeed(options.seed, i), adaptiveDifficulty(options.mastery.get(t.nodeId), options.preference), i < due.length ? '到期複習' : t.title, due[i]?.itemId)
+      return questionItem(t, deriveSeed(options.seed, i), focus === 'intervals' ? intervalPracticeDifficulty(options) : adaptiveDifficulty(options.mastery.get(t.nodeId), options.preference), i < due.length ? '到期複習' : t.title, due[i]?.itemId)
     })
   }
-  const { seed, now, audio, reviews, mastery, preference } = options
-  const intro = options.intro !== false
-  const pathwayId = options.pathwayId ?? 'start'
-  const total = GUIDED_BATCH
-  const rng = createRng(seed)
-  let n = 0
-  const nextSeed = () => deriveSeed(seed, n++)
-  const difficultyFor = (nodeId: string) => adaptiveDifficulty(mastery.get(nodeId), preference)
-
-  const due = rankDueItems(reviews.values(), now)
-    .filter(r => !r.itemId.startsWith('fret.octave.'))
-    .map(r => ({ ...r, templates: templatesForItem(r.itemId).filter(t => onFretboard(t) && usable(t, audio) && nodeById(t.nodeId)?.availability === 'available') }))
-    .filter(r => r.templates.length)
-  const reviewBudget = Math.min(due.length, Math.ceil(total * 0.5))
-  const reviewItems: PlannedItem[] = due.slice(0, reviewBudget).map(r => {
-    const template = pick(rng, r.templates)
-    return questionItem(template, nextSeed(), difficultyFor(template.nodeId), r.reason, r.itemId)
-  })
-
-  const plan: PlannedItem[] = [...reviewItems.slice(0, 2), ...interleave(reviewItems.slice(2))]
-  const remaining = () => total - plan.filter(i => i.kind === 'question').length
-  const steps = PATHWAYS.find(p => p.id === pathwayId)?.steps ?? []
-  const stillOpen = (ids: readonly string[]) => ids.find(id => steps.includes(id) && nodeById(id)?.availability === 'available' && !['familiar', 'fluent'].includes(mastery.get(id)?.state ?? 'new'))
-  const neckNode = stillOpen(COMMUTE_NECK) ?? COMMUTE_NECK.find(id => nodeById(id)?.availability === 'available')
-
-  if (intro && neckNode && (mastery.get(neckNode)?.state ?? 'new') === 'new') plan.push({ kind: 'learn', nodeId: neckNode })
-
-  const pushFrom = (nodeId: string | undefined, count: number, reason: string) => {
-    if (!nodeId || count <= 0) return 0
-    const templates = templatesForNode(nodeId).filter(t => onFretboard(t) && usable(t, audio))
-    if (!templates.length) return 0
-    const isNew = (mastery.get(nodeId)?.state ?? 'new') === 'new'
-    const nAdded = Math.min(count, remaining())
-    for (let i = 0; i < nAdded; i++) plan.push(questionItem(templates[i % templates.length], nextSeed(), isNew ? 1 : difficultyFor(nodeId), reason))
-    return nAdded
+  const plan = buildNotePractice({ ...options, attempts: options.attempts ?? [], practiceContext: options.practiceContext ?? 'pocket' })
+  const first = plan.find(item => item.kind === 'question')
+  if (options.intro !== false && first?.kind === 'question' && (options.mastery.get(first.question.nodeId)?.state ?? 'new') === 'new') {
+    plan.unshift({ kind: 'learn', nodeId: first.question.nodeId })
   }
-
-  const isNew = (mastery.get(neckNode ?? '')?.state ?? 'new') === 'new'
-  pushFrom(neckNode, remaining(), isNew ? '新內容' : '繼續學習')
-  for (const id of COMMUTE_NECK) {
-    if (id === neckNode) continue
-    pushFrom(id, remaining(), '在指板上找')
-  }
-
   return plan
 }
 
@@ -207,5 +181,11 @@ export function recheckFor(question: Extract<PlannedItem, { kind: 'question' }>[
   const itemId = question.reviewItemIds.find(id => !id.startsWith('spell.'))
   const template = templatesForNode(question.nodeId).find(t => t.id === question.templateId)
   if (!template) return null
-  return { kind: 'question', question: template.generate(seed, { difficulty: question.difficulty, itemId }), reason: '再確認一次', recheckOf: question.id }
+  const recheck = template.generate(seed, { difficulty: question.difficulty, itemId })
+  if (question.kind === 'fret-locate' && recheck.kind === 'fret-locate' && question.practiceStage) {
+    recheck.practiceStage = question.practiceStage
+    recheck.targetMidi = question.targetMidi
+    recheck.prompt = question.prompt
+  }
+  return { kind: 'question', question: recheck, reason: '再確認一次', recheckOf: question.id }
 }

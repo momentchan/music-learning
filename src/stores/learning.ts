@@ -63,8 +63,9 @@ export const useLearning = create<LearningState>((set, get) => ({
   },
 
   startGuided: async audio => {
-    const { reviews, mastery, preferences } = get()
-    const plan = buildGuidedSession({ seed: randomSeed(), now: Date.now(), audio, reviews, mastery, preference: preferences.difficulty, focus: preferences.practiceFocus, intro: false })
+    await get().refresh()
+    const { reviews, mastery, preferences, attempts } = get()
+    const plan = buildGuidedSession({ seed: randomSeed(), now: Date.now(), audio, reviews, mastery, preference: preferences.difficulty, focus: preferences.practiceFocus, intro: false, attempts, practiceContext: preferences.practiceContext })
     const session = newSession('guided', plan, { audio, practiceContext: preferences.practiceContext, practiceFocus: preferences.practiceFocus, answerInput: preferences.practiceContext === 'instrument' ? 'play' : 'tap' })
     await repository.saveSession(session)
     const focusId = plan.find(item => item.kind === 'learn')?.nodeId ?? plan.find(item => item.kind === 'question')?.question.nodeId
@@ -79,7 +80,7 @@ export const useLearning = create<LearningState>((set, get) => ({
     const [reviews, attempts, selfReports] = await Promise.all([repository.getReviews(), repository.getAttempts(), repository.getSelfReports()])
     const mastery = computeAllMastery(attempts, reviews, selfReports, Date.now())
     const more = buildGuidedSession({
-      seed: randomSeed(), now: Date.now(), audio: session.settings.audio !== false, reviews, mastery, preference: get().preferences.difficulty, intro: false, focus: session.settings.practiceFocus,
+      seed: randomSeed(), now: Date.now(), audio: session.settings.audio !== false, reviews, mastery, preference: get().preferences.difficulty, intro: false, focus: session.settings.practiceFocus, attempts, practiceContext: session.settings.practiceContext,
     }).filter(item => item.kind === 'question')
     if (!more.length) return null
     const extended = { ...session, plannedItems: [...session.plannedItems, ...more], updatedAt: Date.now() }

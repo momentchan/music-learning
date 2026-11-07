@@ -55,6 +55,8 @@ export interface FretIdentifyQuestion extends QuestionBase {
 }
 
 export interface FretLocateQuestion extends QuestionBase {
+  /** Internal sequencing, independent of mastery or position verification. */
+  practiceStage?: 'map' | 'shuffle' | 'mixed'
   allowedPositions?: { string: number; fret: number }[]
   kind: 'fret-locate'
   tuning: number[]
