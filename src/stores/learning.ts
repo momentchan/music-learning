@@ -1,5 +1,6 @@
 /** Transient UI state over the LearningRepository. The repository (IndexedDB) stays the source of truth. */
 import { create } from 'zustand'
+import { nodeById } from '../curriculum/nodes'
 import { repository } from '../database/repository'
 import { randomSeed } from '../lib/rng'
 import { computeAllMastery, type NodeMastery } from '../learning/mastery'
@@ -22,7 +23,8 @@ interface LearningState {
   load: () => Promise<void>
   refresh: () => Promise<void>
   savePreferences: (patch: Partial<Preferences>) => Promise<void>
-  startGuided: (minutes: number, audio: boolean) => Promise<string>
+  startGuided: (audio: boolean) => Promise<string>
+  extendGuided: (session: PracticeSession) => Promise<PracticeSession | null>
   startLesson: (nodeId: string, audio: boolean) => Promise<string>
   startFree: (nodeIds: string[], count: number, audio: boolean) => Promise<string>
   addUnsaved: (attempt: ExerciseAttempt, sessionId?: string) => void
@@ -56,13 +58,30 @@ export const useLearning = create<LearningState>((set, get) => ({
     try { await repository.savePreferences(preferences) } catch { set({ error: '設定無法儲存在這台裝置上。' }) }
   },
 
-  startGuided: async (minutes, audio) => {
+  startGuided: async audio => {
     const { reviews, mastery, preferences } = get()
-    const plan = buildGuidedSession({ minutes, seed: randomSeed(), now: Date.now(), audio, reviews, mastery, preference: preferences.difficulty })
-    const session = newSession('guided', plan, { minutes, audio })
+    const plan = buildGuidedSession({ seed: randomSeed(), now: Date.now(), audio, reviews, mastery, preference: preferences.difficulty })
+    const session = newSession('guided', plan, { audio })
     await repository.saveSession(session)
-    set({ activeSession: session })
+    const focusId = plan.find(item => item.kind === 'learn')?.nodeId ?? plan.find(item => item.kind === 'question')?.question.nodeId
+    const bridge = focusId ? nodeById(focusId)?.bridge : undefined
+    if (focusId && bridge) await repository.queueBridge({ id: crypto.randomUUID(), nodeId: focusId, taskId: bridge.id, createdAt: Date.now() })
+    const bridgeQueue = await repository.listBridgeQueue()
+    set({ activeSession: session, bridgeQueue })
     return session.id
+  },
+
+  extendGuided: async session => {
+    const [reviews, attempts, selfReports] = await Promise.all([repository.getReviews(), repository.getAttempts(), repository.getSelfReports()])
+    const mastery = computeAllMastery(attempts, reviews, selfReports, Date.now())
+    const more = buildGuidedSession({
+      seed: randomSeed(), now: Date.now(), audio: session.settings.audio !== false, reviews, mastery, preference: get().preferences.difficulty, intro: false,
+    }).filter(item => item.kind === 'question')
+    if (!more.length) return null
+    const extended = { ...session, plannedItems: [...session.plannedItems, ...more], updatedAt: Date.now() }
+    await repository.saveSession(extended)
+    set({ reviews, attempts, selfReports, mastery, activeSession: extended })
+    return extended
   },
 
   startLesson: async (nodeId, audio) => {

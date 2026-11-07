@@ -45,6 +45,18 @@ export function SessionScreen({ sessionId }: { sessionId: string }) {
 
   useEffect(() => { shownAt.current = performance.now(); setShowWhy(false); setHoldAdvance(false); setRetry(null) }, [view])
 
+  // A reload can land past the last planned question. Fetch another batch instead of ending the session.
+  useEffect(() => {
+    if (!session || session.mode !== 'guided' || session.status !== 'active' || view < session.plannedItems.length) return
+    let cancelled = false
+    useLearning.getState().extendGuided(session).then(extended => {
+      if (cancelled) return
+      if (extended) { setSession(extended); setView(session.cursor) }
+      else setSession({ ...session, status: 'completed', endedAt: Date.now() })
+    }).catch(() => { if (!cancelled) setSession({ ...session, status: 'completed', endedAt: Date.now() }) })
+    return () => { cancelled = true }
+  }, [session, view])
+
   // Show the marked fret briefly, then move on. A wrong answer stays longer so the correct position can be seen.
   useEffect(() => {
     if (!answer || holdAdvance || !session || session.status === 'completed' || session.cursor <= view) return
@@ -59,6 +71,7 @@ export function SessionScreen({ sessionId }: { sessionId: string }) {
 
   if (session === undefined) return <p className="helper">載入中…</p>
   if (session === null) return <div className="card"><h2>找不到這個練習</h2><p>它可能已被刪除或來自其他裝置。</p><button className="primary-button" onClick={() => navigate('/')}>回到今日</button></div>
+  if (session.mode === 'guided' && session.status === 'active' && !item) return <p className="helper">下一題…</p>
   if (session.status === 'completed' || !item) return <SessionSummaryView session={session} boxChanges={boxChanges}/>
 
   async function submit(question: Question, response: Response) {
@@ -112,7 +125,13 @@ export function SessionScreen({ sessionId }: { sessionId: string }) {
     const next = { ...session, cursor, updatedAt: Date.now(), outcomes: patch?.outcome ? [...session.outcomes.filter(o => o.index !== view), patch.outcome] : session.outcomes }
     setAnswer(null)
     stop()
-    if (cursor >= session.plannedItems.length) await finish(next)
+    if (cursor >= session.plannedItems.length && session.mode === 'guided') {
+      try {
+        const extended = await learning.extendGuided(next)
+        if (extended && extended.plannedItems.length > cursor) { setSession(extended); setView(cursor); return }
+      } catch { /* show the summary if another batch cannot be stored */ }
+    }
+    if (cursor >= next.plannedItems.length) await finish(next)
     else { setSession(next); setView(cursor) }
   }
 
@@ -165,15 +184,16 @@ export function SessionScreen({ sessionId }: { sessionId: string }) {
 
   advanceRef.current = () => { void advance() }
 
-  const progress = questionCount ? Math.min(1, answeredCount / questionCount) : 0
+  const openEnded = session.mode === 'guided'
+  const progress = !openEnded && questionCount ? Math.min(1, answeredCount / questionCount) : 0
   const node = item.kind === 'question' ? nodeById(item.question.nodeId) : nodeById(item.nodeId)
   const needsAudio = item.kind === 'question' && !!item.question.audio && !audioIsOn()
 
   return <div className="session">
     <div className="session-bar">
       <button type="button" className="icon-button" onClick={() => navigate('/')} aria-label="離開練習（之後可以繼續）">✕</button>
-      <div className="session-progress" role="progressbar" aria-valuemin={0} aria-valuemax={questionCount} aria-valuenow={answeredCount} aria-label="練習進度"><span style={{ width: `${progress * 100}%` }}/></div>
-      <small>{answeredCount}/{questionCount}</small>
+      {!openEnded && <div className="session-progress" role="progressbar" aria-valuemin={0} aria-valuemax={questionCount} aria-valuenow={answeredCount} aria-label="練習進度"><span style={{ width: `${progress * 100}%` }}/></div>}
+      <small>{openEnded ? `已答 ${answeredCount}` : `${answeredCount}/${questionCount}`}</small>
     </div>
     <p className="session-context">{node?.title}{item.kind === 'question' && <> · <span>{item.reason}</span></>}</p>
     {saveError && <div className="notice" role="alert">{saveError}{learning.unsaved.length > 0 && <div className="button-row">

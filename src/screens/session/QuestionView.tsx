@@ -68,10 +68,11 @@ export function QuestionView({ question, grade, response, onSubmit, layout }: Pr
       for (const p of grade!.correctPositions ?? locateTargets(question)) marks.push({ string: p.string, fret: p.fret, label: question.targetLabel.split(' ')[0], tone: 'correct' })
       if (response?.kind === 'fret-locate' && grade!.result !== 'correct') marks.push({ string: response.string, fret: response.fret, label: '✕', tone: 'wrong' })
     }
-    return <div className="question">
+    return <div className="question playing">
       <h2 className="question-prompt">{question.prompt}</h2>
-      <div className="question-visual board"><Fretboard leftHanded={leftHanded} tuning={question.tuning} orientation={layout} minFret={0} maxFret={question.maxFret === 0 ? 5 : question.maxFret}
-        marks={marks} onSelect={(string, fret) => { if (!answered) onSubmit({ kind: 'fret-locate', string, fret }) }} disabled={answered} label="可點選的指板，點一個位置就送出"/></div>
+      <div className="playing-neck"><Fretboard leftHanded={leftHanded} tuning={question.tuning} orientation="playing" minFret={0} maxFret={question.maxFret === 0 ? 5 : question.maxFret}
+        marks={marks} onSelect={(string, fret) => { if (!answered) onSubmit({ kind: 'fret-locate', string, fret }) }} disabled={answered} label="可點選的指板，琴頸朝左，低音弦在上，點一個位置就送出"/></div>
+      <p className="helper playing-hint">把手機橫過來，琴頸朝左，像看著手上的吉他。</p>
     </div>
   }
 

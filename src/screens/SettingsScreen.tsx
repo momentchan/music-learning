@@ -89,7 +89,6 @@ export function SettingsScreen() {
   return <div className="settings">
     <section className="card settings-card">
       <h3>練習</h3>
-      <label>預設練習長度<select value={preferences.sessionMinutes} onChange={e => set({ sessionMinutes: Number(e.target.value) as 3 | 5 | 10 })}>{[3, 5, 10].map(m => <option key={m} value={m}>{m} 分鐘</option>)}</select></label>
       <label>每週目標天數<select value={preferences.weeklyGoalDays} onChange={e => set({ weeklyGoalDays: Number(e.target.value) })}>{[2, 3, 4, 5, 6, 7].map(d => <option key={d} value={d}>{d} 天</option>)}</select></label>
       <label>難度<select value={String(preferences.difficulty)} onChange={e => set({ difficulty: e.target.value === 'auto' ? 'auto' : Number(e.target.value) as 1 | 2 | 3 })}>
         <option value="auto">自動（依你的正確率調整）</option><option value="1">1 · 入門</option><option value="2">2 · 進階</option><option value="3">3 · 挑戰</option></select></label>

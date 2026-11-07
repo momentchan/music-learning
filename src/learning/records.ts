@@ -86,7 +86,6 @@ export interface PathwayProgress { pathwayId: string; completedNodeIds: string[]
 
 export interface Preferences {
   weeklyGoalDays: number
-  sessionMinutes: 3 | 5 | 10
   difficulty: 'auto' | 1 | 2 | 3
   practiceLayout: 'vertical' | 'horizontal'
   latencyOffsetMs: number | null
@@ -98,7 +97,7 @@ export interface Preferences {
 }
 
 export const DEFAULT_PREFERENCES: Preferences = {
-  weeklyGoalDays: 4, sessionMinutes: 5, difficulty: 'auto', practiceLayout: 'vertical', latencyOffsetMs: null,
+  weeklyGoalDays: 4, difficulty: 'auto', practiceLayout: 'vertical', latencyOffsetMs: null,
   tuning: 'standard', noteNaming: 'sharps-and-flats', leftHanded: false, theme: 'dark', language: 'zh-TW',
 }
 

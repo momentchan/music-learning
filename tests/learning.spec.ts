@@ -41,7 +41,7 @@ async function answerCurrent(page: Page): Promise<boolean> {
 
 test('cold start reaches the first practice question in two taps', async ({ page }) => {
   await page.goto('/')
-  await page.getByRole('button', { name: /開始 5 分鐘練習/ }).click()
+  await page.getByRole('button', { name: '▶ 開始練習' }).click()
   await page.getByRole('button', { name: /懂了，開始練習/ }).click()
   await expect(page.locator('.question-prompt')).toBeVisible()
 })
@@ -135,8 +135,9 @@ test('session fretboard preserves proportions and hides open-string hints on a 3
     if (await page.locator('.fret-cell.interactive').first().isVisible().catch(() => false)) break
     await answerCurrent(page)
   }
-  const cell = page.locator('.fret-cell.interactive').first()
+  const cell = page.locator('.fret-cell.interactive[data-cell="6-1"]')
   await expect(cell).toBeVisible()
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
   const box = await cell.locator('rect').first().boundingBox()
   expect(box!.width).toBeGreaterThanOrEqual(40)
   expect(await page.locator('.shared-fretboard .svg-string-label').allTextContents()).toEqual(['6', '5', '4', '3', '2', '1'])

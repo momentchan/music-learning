@@ -100,6 +100,27 @@
 .fretboard-scroll .fretboard.vertical{height:auto}
 .shared-fretboard{width:100%;max-width:420px;margin:0 auto;touch-action:manipulation}
 .shared-fretboard.is-horizontal{max-width:760px}
+.playing-neck{overflow-x:auto;max-width:100%;margin:0 auto}
+.shared-fretboard.is-playing{width:max-content;max-width:none;margin:0}
+.shared-fretboard.is-playing svg{height:240px;width:var(--neck-w);max-width:none}
+.shared-fretboard.is-playing.is-left svg{transform:scaleX(-1)}
+.shared-fretboard.is-playing.is-left svg text{transform:scaleX(-1);transform-box:fill-box;transform-origin:center}
+.playing-hint{margin:8px 0 0}
+@media (orientation:landscape) and (max-height:520px){
+  .session-page.app-shell{height:100dvh;min-height:0;overflow:hidden;padding-bottom:0}
+  .session-page .topbar{display:none}
+  .session-page .content{height:100%;display:flex;flex-direction:column;padding:6px 12px;box-sizing:border-box}
+  .session-page .session{flex:1;min-height:0;display:flex;flex-direction:column}
+  .session-page .session-bar{margin-bottom:4px}
+  .session-page .session-context{display:none}
+  .session-page .question-card{flex:1;min-height:0;display:flex;flex-direction:column;padding:6px 10px;overflow:hidden}
+  .session-page .question.playing{flex:1;min-height:0;display:flex;flex-direction:column}
+  .session-page .playing-hint{display:none}
+  .session-page .question-prompt{margin-bottom:2px;font-size:17px}
+  .session-page .playing-neck{flex:1;min-height:0;overflow:hidden}
+  .session-page .playing-neck .shared-fretboard.is-playing{height:100%;width:auto;max-width:100%}
+  .session-page .playing-neck .shared-fretboard.is-playing svg{height:100%;width:auto;max-width:100%;max-height:100%}
+}
 .shared-fretboard .fretboard{margin:0 auto;max-width:none;min-width:0;background:none;border-radius:0}
 .fret-cell.interactive{cursor:pointer}
 .fret-cell:focus{outline:none}

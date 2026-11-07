@@ -63,7 +63,7 @@ export function ProgressScreen() {
       <h3>最近的練習</h3>
       {sessions.length ? <ul className="history">{sessions.map(s => <li key={s.id}>
         <span>{new Date(s.startedAt).toLocaleDateString('zh-TW', { month: 'numeric', day: 'numeric' })}</span>
-        <strong>{s.mode === 'lesson' ? `課程：${nodeById(s.settings.nodeId ?? '')?.title ?? ''}` : s.mode === 'guided' ? `${s.settings.minutes} 分鐘練習` : s.mode === 'free' ? '自由練習' : s.mode === 'lab' ? '工具頁練習' : '舊版紀錄'}</strong>
+        <strong>{s.mode === 'lesson' ? `課程：${nodeById(s.settings.nodeId ?? '')?.title ?? ''}` : s.mode === 'guided' ? (s.settings.minutes ? `${s.settings.minutes} 分鐘練習` : '練習') : s.mode === 'free' ? '自由練習' : s.mode === 'lab' ? '工具頁練習' : '舊版紀錄'}</strong>
         <small>{s.summary ? `${s.summary.correct}/${s.summary.graded} 正確` : s.status === 'active' ? '進行中' : s.status === 'abandoned' ? '未完成' : ''}</small>
       </li>)}</ul> : <p className="helper">完成的練習會出現在這裡。</p>}
     </section>

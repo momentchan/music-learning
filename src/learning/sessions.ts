@@ -8,8 +8,8 @@ import { nextPathwayNode } from './mastery'
 import type { PlannedItem } from './records'
 import { rankDueItems, type ReviewState } from './scheduler'
 
-export const QUESTIONS_PER_MINUTES: Record<number, number> = { 3: 6, 5: 10, 10: 20 }
-export const questionsFor = (minutes: number) => QUESTIONS_PER_MINUTES[minutes] ?? Math.max(4, Math.round(minutes * 2))
+/** One commute batch. Another batch is appended when this one runs out, until the learner leaves. */
+export const GUIDED_BATCH = 8
 
 /** Adaptive difficulty: step down below 60 % recent accuracy, step up above 90 % with enough evidence. */
 export function adaptiveDifficulty(mastery: NodeMastery | undefined, preference: 'auto' | Difficulty = 'auto'): Difficulty {
@@ -90,7 +90,6 @@ export function buildFreePractice({ nodeIds, count, seed, difficulty, audio, mas
 }
 
 export interface GuidedOptions {
-  minutes: number
   seed: number
   now: number
   audio: boolean
@@ -98,17 +97,20 @@ export interface GuidedOptions {
   mastery: Map<string, NodeMastery>
   preference: 'auto' | Difficulty
   pathwayId?: string
+  /** First batch shows the learn card. Later batches are questions only. */
+  intro?: boolean
 }
 
 /**
  * Commute session: due reviews, then phone work that does not need a guitar.
  * Every question is answered by tapping the fretboard. Octave-shape items and text-only questions are left out.
- * The bridge task is queued for later; it is not something the learner has to play now.
+ * The batch keeps going until the learner leaves. The guitar task is queued, not played here.
  */
 export function buildGuidedSession(options: GuidedOptions): PlannedItem[] {
-  const { minutes, seed, now, audio, reviews, mastery, preference } = options
+  const { seed, now, audio, reviews, mastery, preference } = options
+  const intro = options.intro !== false
   const pathwayId = options.pathwayId ?? 'start'
-  const total = questionsFor(minutes)
+  const total = GUIDED_BATCH
   const rng = createRng(seed)
   let n = 0
   const nextSeed = () => deriveSeed(seed, n++)
@@ -132,7 +134,7 @@ export function buildGuidedSession(options: GuidedOptions): PlannedItem[] {
   const neckNode = stillOpen(COMMUTE_NECK)
   const theoryNode = stillOpen(COMMUTE_THEORY)
 
-  if (focus && (mastery.get(focus)?.state ?? 'new') === 'new') plan.push({ kind: 'learn', nodeId: focus })
+  if (intro && focus && (mastery.get(focus)?.state ?? 'new') === 'new') plan.push({ kind: 'learn', nodeId: focus })
 
   const pushFrom = (nodeId: string | undefined, count: number, reason: string) => {
     if (!nodeId || count <= 0) return 0
@@ -149,7 +151,7 @@ export function buildGuidedSession(options: GuidedOptions): PlannedItem[] {
     const mainNode = focusIsTheory ? theoryNode ?? focus : neckNode ?? focus
     const sideNode = focusIsTheory ? neckNode : theoryNode
     const room = remaining()
-    const sideN = sideNode && sideNode !== mainNode ? Math.min(minutes >= 10 ? 4 : minutes >= 5 ? 2 : 1, room) : 0
+    const sideN = sideNode && sideNode !== mainNode ? Math.min(2, room) : 0
     const mainReason = (mastery.get(mainNode ?? '')?.state ?? 'new') === 'new' ? '新內容' : '繼續學習'
     pushFrom(mainNode, Math.max(0, room - sideN), mainReason)
     pushFrom(sideNode, sideN, focusIsTheory ? '在指板上找' : '在指板上找級數')
@@ -160,8 +162,6 @@ export function buildGuidedSession(options: GuidedOptions): PlannedItem[] {
     pushFrom(focus, remaining(), isNew ? '新內容' : '繼續學習')
   }
 
-  const bridgeNode = nodeById(focus ?? neckNode ?? theoryNode ?? '')
-  if (bridgeNode?.bridge) plan.push({ kind: 'bridge', nodeId: bridgeNode.id, taskId: bridgeNode.bridge.id })
   return plan
 }
 

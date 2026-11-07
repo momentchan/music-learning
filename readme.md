@@ -22,7 +22,7 @@ npm run build
 ## Status (Phase A of the spec roadmap)
 
 ### Functional
-- **Today screen:** a one-tap 3/5/10-minute session that finishes on the phone. It runs due reviews, then fretboard questions you answer by tapping a position, a few scale-degree questions, and ear items when sound is on. The guitar task is queued for later. Recommendations include reasons, the weekly goal has no streak penalty, and weak items are listed.
+- **Today screen:** one Start practice button. The phone session keeps offering fretboard taps until the learner leaves, with due reviews first and a few scale-degree questions mixed in. The guitar task is queued for later. Recommendations include reasons, the weekly goal has no streak penalty, and weak items are listed.
 - **Learn screen:** a three-tier skill graph and six pathways. The default ★ Start Here is for someone who already accompanies with barre chords: notes on every string, accidentals, interval shapes, the major scale, diatonic chords, then function. Open strings, open-chord shapes, and basic strumming sit on an optional review path. Octave-shape drills are not scheduled. Daily questions are answered on the fretboard. Availability labels stay honest, and any node can still be opened freely.
 - **Lessons:** each lesson follows Learn → Recall → Locate → Hear → Apply → Play (bridge task). All 16 Tier 1 nodes that have exercises are available:
   - open strings

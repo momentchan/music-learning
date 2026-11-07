@@ -11,7 +11,6 @@ const WEEKDAYS = ['一', '二', '三', '四', '五', '六', '日']
 
 export function TodayScreen() {
   const learning = useLearning()
-  const [minutes, setMinutes] = useState<number>(learning.preferences.sessionMinutes)
   const [starting, setStarting] = useState(false)
   const [error, setError] = useState('')
   const now = Date.now()
@@ -27,25 +26,22 @@ export function TodayScreen() {
 
   async function start() {
     setStarting(true)
-    try { navigate(`/session/${await learning.startGuided(minutes, audioIsOn())}`) }
+    try { navigate(`/session/${await learning.startGuided(audioIsOn())}`) }
     catch { setError('無法建立練習（本機儲存空間可能被封鎖）。') }
     finally { setStarting(false) }
   }
 
   return <div className="today">
     {active && activeRemaining > 0 && <section className="card continue-card">
-      <div><p className="eyebrow">繼續 CONTINUE</p><h2>上次的練習還剩 {activeRemaining} 題</h2><p className="helper">{active.mode === 'lesson' ? nodeById(active.settings.nodeId ?? '')?.title : `${active.settings.minutes ?? ''} 分鐘練習`}</p></div>
+      <div><p className="eyebrow">繼續 CONTINUE</p><h2>{active.mode === 'guided' ? '接著上次的練習' : `上次的練習還剩 ${activeRemaining} 題`}</h2><p className="helper">{active.mode === 'lesson' ? nodeById(active.settings.nodeId ?? '')?.title : '離開不會丟掉進度。'}</p></div>
       <button className="primary-button" onClick={() => navigate(`/session/${active.id}`)}>繼續 →</button>
     </section>}
 
     <section className="card start-card">
       <p className="eyebrow">今日練習 TODAY</p>
       <h2>{due.length ? `${due.length} 個項目到期複習` : learning.attempts.length ? '今天沒有到期的項目，學點新的吧' : '從六條弦的音名開始：第 6、5 弦以外也能說出來'}</h2>
-      <div className="minute-chips" role="radiogroup" aria-label="練習長度">
-        {[3, 5, 10].map(m => <button key={m} role="radio" aria-checked={minutes === m} className={minutes === m ? 'active' : ''} onClick={() => setMinutes(m)}>{m} 分鐘</button>)}
-      </div>
-      <button className="primary-button wide big" disabled={starting} onClick={() => void start()}>▶ 開始 {minutes} 分鐘練習</button>
-      <p className="helper">在指板上點出位置就能做完，不排純文字問答。吉他的部分先排到稍後，回家再彈。隨時可以離開。</p>
+      <button className="primary-button wide big" disabled={starting} onClick={() => void start()}>▶ 開始練習</button>
+      <p className="helper">在指板上點一下就送出。做到不想練再離開，進度會留著。吉他的部分在「吉他」頁，回家再彈。</p>
       {error && <p className="notice" role="alert">{error}</p>}
     </section>
 
