@@ -18,6 +18,23 @@ async function attempts(page: Page) {
   })
 }
 
+test('horizontal neck puts thin string 1 above thick string 6 without changing B3 or keyboard answers', async ({ page }) => {
+  await page.goto('/lab/fretboard')
+  const board = page.locator('svg.fretboard')
+  const upper = await board.locator('[data-cell="1-4"]').boundingBox()
+  const lower = await board.locator('[data-cell="6-4"]').boundingBox()
+  expect(upper!.y).toBeLessThan(lower!.y)
+  const thicknesses = await board.locator('.svg-string-label').evaluateAll(labels => labels.map(label => Number(label.parentElement!.querySelector('line')!.getAttribute('stroke-width'))))
+  expect(thicknesses[0]).toBeLessThan(thicknesses[5])
+  await board.locator('[data-cell="3-4"]').click()
+  await expect(page.locator('.selected-note strong')).toHaveText('B3')
+  await board.locator('[data-cell="1-1"]').focus()
+  await page.keyboard.press('ArrowDown')
+  await expect(board.locator('.fret-cell:focus')).toHaveAttribute('data-cell', '2-1')
+  await page.keyboard.press('Enter')
+  await expect(page.locator('.selected-note strong')).toHaveText('C4')
+})
+
 test('portrait practice has large targets, no swipe answer, correct keyboard mapping and an explicit end', async ({ browser }, info) => {
   const context = await browser.newContext({ viewport: { width: 320, height: 568 }, isMobile: true, hasTouch: true })
   const page = await context.newPage()
@@ -38,7 +55,7 @@ test('portrait practice has large targets, no swipe answer, correct keyboard map
   await expect(page.locator('.question-card')).toHaveAttribute('inert', '')
   await page.getByRole('button', { name: '繼續練習', exact: true }).click()
   await cell.focus(); await page.keyboard.press('ArrowDown')
-  await expect(page.locator('.fret-cell:focus')).toHaveAttribute('data-cell', /^5-/)
+  await expect(page.locator('.fret-cell:focus')).toHaveAttribute('data-cell', /^2-/)
   await page.keyboard.press('Enter')
   await expect.poll(async () => (await attempts(page)).length).toBe(1)
   await page.getByRole('button', { name: '結束這次', exact: true }).click()

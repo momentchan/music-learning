@@ -23,6 +23,10 @@ Primary navigation is now Practice / Courses / Tools / Progress. Pocket and inst
 
 Input and output are independent. Choosing guitar practice uses microphone input for supported tasks. Explicitly starting input can accept the first note without a hidden silence prerequisite; subsequent answers require releasing the previous note. The input meter and observed pitch remain visible regardless of whether grading accepts a note. Low input, denied permission and disconnected audio are distinct states. Quiet-input regression tests do not replace real-device validation.
 
+### Horizontal string order — 2026-11-07 correction
+
+All horizontal practice/reference/progress necks use string 1 (thin high E) at the top and string 6 (thick low E) at the bottom, consistent with TAB. This supersedes the earlier player-view 6-at-top convention. Left-handed layouts mirror the nut/fret direction only; the vertical order stays the same. Textbook vertical diagrams keep string 6 on the left for right-handed players. Musical positions, pitch grading and stored answers are unchanged; keyboard movement follows the new visible order.
+
 ## 0. Mission
 
 Guitar Lab is a mobile-first, local-first web app that makes guitarists **better at playing**, not just better at answering theory quizzes.

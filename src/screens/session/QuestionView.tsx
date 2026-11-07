@@ -80,7 +80,7 @@ export function QuestionView({ question, grade, response, onSubmit, layout, inpu
       <h2 className="question-prompt">{question.prompt}</h2>
       <PracticeBoard leftHanded={leftHanded} tuning={question.tuning} minFret={question.minFret} maxFret={question.maxFret}
         marks={marks} onSelect={byEar ? undefined : (string, fret, inputMethod) => { if (!answered) onSubmit({ kind: 'fret-locate', string, fret, inputMethod }) }} disabled={answered || byEar}
-        label={byEar ? '照圖彈奏，App 檢查音高' : '可點選的指板，上方第 6 弦，點一下送出'}/>
+        label={byEar ? '照圖彈奏，App 檢查音高' : '可點選的指板，上方第 1 弦、下方第 6 弦，點一下送出'}/>
 
     </div>
   }

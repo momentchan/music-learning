@@ -4,7 +4,7 @@ import { positionsForNote } from '../src/music/fretboardQuiz'
 test('reference fretboard selects a note without recording a graded attempt', async ({ page }) => {
   await page.goto('/lab/fretboard')
   await expect(page.getByRole('heading', { name: '指板查詢' })).toBeVisible()
-  await expect(page.locator('.svg-string-label')).toHaveText(['6','5','4','3','2','1'])
+  await expect(page.locator('.svg-string-label')).toHaveText(['1','2','3','4','5','6'])
   await expect(page.getByRole('button', { name: /One note|Random review/ })).toHaveCount(0)
   await page.locator('svg.fretboard g[aria-label="String 1, fret 1, F4"]').click()
   await expect(page.locator('.selected-note strong')).toHaveText('F4')

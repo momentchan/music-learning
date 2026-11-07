@@ -2,12 +2,15 @@ import { describe, expect, it } from 'vitest'
 import { nextPosition, stringOrder, FRET_WINDOWS } from './projection'
 
 describe('fretboard projection', () => {
-  it('player and TAB views name their different string order', () => {
-    expect(stringOrder('playing')).toEqual([6,5,4,3,2,1])
+  it('horizontal views consistently place the thin first string above the thick sixth string', () => {
+    expect(stringOrder('playing')).toEqual([1,2,3,4,5,6])
     expect(stringOrder('horizontal')).toEqual([1,2,3,4,5,6])
+    expect(stringOrder('playing', true)).toEqual([1,2,3,4,5,6])
+    expect(stringOrder('vertical')).toEqual([6,5,4,3,2,1])
   })
   it('keyboard moves in visible directions, including left-handed player view', () => {
-    expect(nextPosition(6, 5, 'ArrowDown', 'playing', false, 0, 12)).toEqual({ string: 5, fret: 5 })
+    expect(nextPosition(1, 5, 'ArrowDown', 'playing', false, 0, 12)).toEqual({ string: 2, fret: 5 })
+    expect(nextPosition(6, 5, 'ArrowUp', 'playing', false, 0, 12)).toEqual({ string: 5, fret: 5 })
     expect(nextPosition(3, 5, 'ArrowLeft', 'playing', true, 0, 12)).toEqual({ string: 3, fret: 6 })
     expect(nextPosition(6, 5, 'ArrowRight', 'vertical', false, 0, 12)).toEqual({ string: 5, fret: 5 })
     expect(nextPosition(6, 5, 'ArrowRight', 'vertical', true, 0, 12)).toEqual({ string: 6, fret: 5 })

@@ -146,7 +146,7 @@ test('session fretboard preserves proportions and hides open-string hints on a 3
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
   const box = await cell.locator('rect').first().boundingBox()
   expect(box!.width).toBeGreaterThanOrEqual(40)
-  expect(await page.locator('.shared-fretboard .svg-string-label').allTextContents()).toEqual(['6', '5', '4', '3', '2', '1'])
+  expect(await page.locator('.shared-fretboard .svg-string-label').allTextContents()).toEqual(['1', '2', '3', '4', '5', '6'])
   const board = page.locator('.shared-fretboard svg')
   const ratio = await board.evaluate(element => { const box = element.getBoundingClientRect(); return box.width / box.height })
   await page.setViewportSize({ width: 320, height: 844 })

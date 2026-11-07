@@ -17,9 +17,9 @@ const LABELS: Record<MarkTone, string> = { root: '根音', reference: '參考', 
 export function Fretboard({ tuning, minFret = 0, maxFret = 12, orientation, marks = [], showNoteNames = false, onSelect, disabled, label, leftHanded = false, selectableRange, fitHeight, cellLabel }: FretboardProps) {
   const ref = useRef<SVGSVGElement>(null)
   const gesture = useRef<{ x: number; y: number; moved: boolean } | null>(null)
-  const [focus, setFocus] = useState({ string: 6, fret: minFret })
-  const vertical = orientation === 'vertical'
   const order = stringOrder(orientation, leftHanded)
+  const [focus, setFocus] = useState({ string: order[0], fret: minFret })
+  const vertical = orientation === 'vertical'
   const frets = Array.from({ length: maxFret - minFret + 1 }, (_, i) => i + minFret)
   const margin = 40, step = vertical && fitHeight ? Math.max(12, (fitHeight - margin - 8) / frets.length) : 64, stringStep = 52
   const wires = [margin]
@@ -61,7 +61,7 @@ export function Fretboard({ tuning, minFret = 0, maxFret = 12, orientation, mark
         const x = (a.x + b.x) / 2, y = (a.y + b.y) / 2
         return (f === 12 ? [-stringStep, stringStep] : [0]).map(offset => <circle key={`${f}-${offset}`} cx={x + (vertical ? offset : 0)} cy={y + (vertical ? 0 : offset)} r="6" fill="#d5c6aa" opacity=".6"/>)
       })}
-      {[6, 5, 4, 3, 2, 1].map(string => {
+      {order.map(string => {
         const a = project(string, minFret), b = project(string, maxFret)
         return <g key={string}>
           <line x1={vertical ? a.x : Math.min(edge(0), edge(frets.length))} x2={vertical ? a.x : Math.max(edge(0), edge(frets.length))} y1={vertical ? edge(0) : a.y} y2={vertical ? edge(frets.length) : a.y} stroke="#c5bdb1" strokeWidth={1 + (string - 1) * .35}/>
@@ -69,7 +69,7 @@ export function Fretboard({ tuning, minFret = 0, maxFret = 12, orientation, mark
         </g>
       })}
       {frets.map(f => { const p = project(1, f); return <text key={f} x={vertical ? 16 : p.x} y={vertical ? p.y + 4 : height - 15} textAnchor="middle" className="svg-fret-label">{f}</text> })}
-      {[6, 5, 4, 3, 2, 1].flatMap(string => frets.map(fret => {
+      {order.flatMap(string => frets.map(fret => {
         const cellStep = wires[fret - minFret + 1] - wires[fret - minFret]
         const p = project(string, fret), mark = marksByCell.get(`${string}-${fret}`)
         const name = displayNote(PC_SHARP[(tuning[6 - string] + fret) % 12])

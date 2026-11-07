@@ -2,7 +2,7 @@ export type BoardOrientation = 'vertical' | 'horizontal' | 'playing'
 
 export function stringOrder(orientation: BoardOrientation, leftHanded = false): number[] {
   if (orientation === 'vertical') return leftHanded ? [1, 2, 3, 4, 5, 6] : [6, 5, 4, 3, 2, 1]
-  return orientation === 'playing' ? [6, 5, 4, 3, 2, 1] : [1, 2, 3, 4, 5, 6]
+  return [1, 2, 3, 4, 5, 6]
 }
 
 export function nextPosition(string: number, fret: number, key: string, orientation: BoardOrientation, leftHanded: boolean, min: number, max: number) {
