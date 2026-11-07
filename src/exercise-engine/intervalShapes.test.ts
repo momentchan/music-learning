@@ -1,3 +1,6 @@
+import { intervalNotes, intervalRelation, presentIntervalQuestion } from './intervalQuestion'
+import { parseNote, pitchClass } from '../music-theory/notes'
+import type { ConstructQuestion } from './types'
 import { describe, expect, it } from 'vitest'
 import { generate, templatesForNode } from './registry'
 import type { ChoiceQuestion, FretLocateQuestion } from './types'
@@ -54,4 +57,43 @@ describe('complete playable interval practice', () => {
     expect(pools[1]).toEqual(new Set(['M3', 'm3', 'P4', 'P5', 'm2', 'M2', 'm6', 'M6', 'P8']))
     expect(pools[2]).toEqual(new Set(names))
   })
+})
+
+it('uses interval spelling rather than interchangeable pitch-class aliases', () => {
+  expect(intervalNotes(47, 'M6').target).toBe('G#')
+  expect(intervalNotes(48, 'm6').target).toBe('Ab')
+  for (const name of ['m2', 'M2', 'm3', 'M3', 'P4', 'A4', 'P5', 'm6', 'M6', 'm7', 'M7', 'P8']) {
+    for (let root = 40; root < 76; root++) {
+      const n = intervalNotes(root, name)
+      expect(Math.abs(parseNote(n.target).acc)).toBeLessThanOrEqual(1)
+      expect(pitchClass(parseNote(n.target))).toBe(n.targetMidi % 12)
+    }
+  }
+})
+
+it('upgrades saved interval presentation without moving answers or changing evidence', () => {
+  const q = generate('interval.shapes.locate', 21, 3, 'interval.shape.M6.std') as FretLocateQuestion
+  const legacy = { ...q, interval: undefined, prompt: '根音在第 6 弦第 7 格，在第 4 弦找音程', reference: { ...q.reference!, label: 'R' } }
+  const shown = presentIntervalQuestion(legacy) as FretLocateQuestion
+  expect(shown.prompt).not.toMatch(/弦|格|R|M6/)
+  expect(shown.reference!.label).not.toBe('R')
+  expect(shown.targetMidi).toBe(q.targetMidi)
+  expect(locateTargets(shown)).toEqual(locateTargets(q))
+  expect(shown.reviewItemIds).toEqual(q.reviewItemIds)
+  expect(intervalRelation(shown)).toContain('大六度')
+})
+
+it('keeps naming evidence separate and rejects enharmonic substitutes as complete answers', () => {
+  for (let seed = 0; seed < 60; seed++) {
+    const q = generate('interval.shapes.name', seed, 2, 'interval.name.M6') as ConstructQuestion
+    expect(q.interval!.name).toBe('M6')
+    expect(q.reviewItemIds).toEqual(['interval.name.M6', 'spell.interval'])
+    expect(validate(q, { kind: 'construct', notes: q.expected }).result).toBe('correct')
+    expect(q.prompt).not.toMatch(/弦|格/)
+  }
+  const interval = intervalNotes(47, 'M6')
+  const q = { ...generate('interval.shapes.name', 1, 2), kind: 'construct', interval, expected: ['G#'], given: ['B'] } as ConstructQuestion
+  const grade = validate(q, { kind: 'construct', notes: ['Ab'] })
+  expect(grade.result).toBe('partial')
+  expect(Object.values(grade.itemResults)).not.toContain(true)
 })

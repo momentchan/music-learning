@@ -1,3 +1,4 @@
+import { presentIntervalQuestion, intervalRelation } from '../../exercise-engine/intervalQuestion'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { navigate } from '../../app/router'
 import { nodeById } from '../../curriculum/nodes'
@@ -105,7 +106,8 @@ export function SessionScreen({ sessionId }: { sessionId: string }) {
 
   useEffect(() => { if (!paused) shownAt.current = performance.now() }, [paused])
 
-  const item: PlannedItem | undefined = session?.plannedItems[view]
+  const storedItem = session?.plannedItems[view]
+  const item: PlannedItem | undefined = useMemo(() => storedItem?.kind === 'question' ? { ...storedItem, question: presentIntervalQuestion(storedItem.question) } : storedItem, [storedItem])
   const instrument = session?.settings.practiceContext === 'instrument'
   const inputMode = inputOverride ?? session?.settings.answerInput ?? (instrument ? learning.preferences.answerInput : 'tap')
   const questionCount = session?.plannedItems.filter(i => i.kind === 'question').length ?? 0
@@ -133,7 +135,7 @@ export function SessionScreen({ sessionId }: { sessionId: string }) {
       id: crypto.randomUUID(), sessionId: session.id, exerciseType: question.kind, templateId: question.templateId, topicId: question.nodeId, nodeId: question.nodeId,
       inputMethod: microphone ? 'microphone' : response.kind === 'fret-locate' ? response.inputMethod ?? 'tap' : 'tap',
       practiceContext: session.settings.practiceContext ?? 'pocket',
-      verificationScope: grade.verificationScope ?? (question.kind === 'fret-locate' ? 'screenPosition' : question.kind === 'fret-identify' ? 'noteNaming' : 'unknown'),
+      verificationScope: grade.verificationScope ?? (question.kind === 'fret-locate' ? 'screenPosition' : question.kind === 'fret-identify' || question.templateId === 'interval.shapes.name' ? 'noteNaming' : 'unknown'),
       reviewItemIds: microphone ? [] : question.reviewItemIds, itemResults: grade.itemResults, generatorVersion: question.generatorVersion, question, response,
       expected: grade.expectedText, correct: grade.result === 'correct', result: grade.result, errorClass: grade.errorClass, evidenceLevel: question.evidenceLevel,
       assisted: isRetry || hinted, retryOf: retry?.firstAttemptId, responseMs: microphone || question.kind === 'rhythm' ? 0 : Math.round(performance.now() - shownAt.current), replays: 0,
@@ -292,8 +294,9 @@ export function SessionScreen({ sessionId }: { sessionId: string }) {
       {!answer && <button type="button" className="text-button" onClick={() => { if (retry) void advance(); else void skip() }}>{needsAudio ? '跳過這題（需要聲音，不扣分）' : '跳過（不扣分）'}</button>}
       {answer && <div className={`feedback result-${answer.grade.result}`} role="status">
         <strong>{answer.grade.result === 'correct' ? (answer.response.kind === 'played-note' ? '✓ 音高正確' : '✓ 正確') : answer.grade.result === 'partial' ? '◐ 部分正確' : '✕ 還不對'}{hinted ? '（有提示）' : ''}</strong>
-        {(answer.response.kind !== 'played-note' || answer.grade.result !== 'correct') && <p>{answer.grade.feedback}</p>}
-        {answer.grade.result !== 'correct' && answer.response.kind !== 'played-note' && <p className="expected">正確答案：{answer.grade.expectedText}</p>}
+        {item.question.interval && <p>{intervalRelation(item.question)}</p>}
+        {(item.question.interval ? answer.grade.result !== 'correct' : (answer.response.kind !== 'played-note' || answer.grade.result !== 'correct')) && <p>{answer.grade.feedback}</p>}
+        {!item.question.interval && answer.grade.result !== 'correct' && answer.response.kind !== 'played-note' && <p className="expected">正確答案：{answer.grade.expectedText}</p>}
         {offersWhy(item.question) && showWhy && <p className="explanation-text">{item.question.explanation}</p>}
         {answer.response.kind !== 'played-note' && (offersWhy(item.question) || item.question.answerAudio) && <div className="feedback-actions">
           {offersWhy(item.question) && <button type="button" className="secondary-button" onClick={() => { setShowWhy(!showWhy) }} aria-expanded={showWhy}>{showWhy ? t.common.hideWhy : t.common.why}</button>}

@@ -16,6 +16,7 @@ interface QuestionBase {
   difficulty: Difficulty
   evidenceLevel: EvidenceLevel
   prompt: string
+  interval?: { name: string; root: string; target: string; rootMidi: number; targetMidi: number }
   /** Review items this question gives evidence for. */
   reviewItemIds: string[]
   /** Explanation shown after answering (what is true and why). */

@@ -15,6 +15,7 @@ export function itemLabel(itemId: string): string {
     if (itemId.startsWith('fret.note.')) return `第 ${p[3].slice(1)} 弦的 ${noteText(p[2])}`
     if (itemId.startsWith('fret.open.')) return `第 ${p[2].slice(1)} 弦空弦`
     if (itemId.startsWith('fret.octave.')) return `八度：第 ${p[2].replace('s', '').replace('-s', '→')} 弦`
+    if (itemId.startsWith('interval.name.')) return `${intervalLabel(p[2])} 音名`
     if (itemId.startsWith('interval.shape.')) return `${intervalLabel(p[2])} 形狀${p[3] === 'gb' ? '（跨 G–B 弦）' : ''}`
     if (itemId.startsWith('interval.')) return intervalLabel(p[1])
     if (itemId.startsWith('triad.')) return TRIAD[p[1]] ?? itemId

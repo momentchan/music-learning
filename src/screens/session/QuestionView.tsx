@@ -46,7 +46,7 @@ export function QuestionView({ question, grade, response, onSubmit, inputMode, h
       {audioButton}
       {shape && <div className="question-visual"><ChordDiagram leftHanded={leftHanded} shape={shape} size={170} showName={false}/></div>}
       {display?.positions && <div className="question-visual board"><PracticeBoard focusFret={display.positions[0]?.[1]} leftHanded={leftHanded} tuning={[40, 45, 50, 55, 59, 64]} label="題目位置"
-        marks={display.positions.map(([string, fret, label]) => ({ string, fret, label, tone: label === 'R' ? 'root' : 'target' }))}/></div>}
+        marks={display.positions.map(([string, fret, label], i) => ({ string, fret, label: answered && question.interval && i === 1 ? displayNote(question.interval.target) : label, tone: label === 'R' || (!!question.interval && i === 0) ? 'root' : 'target' }))}/></div>}
       {display?.pattern && <PatternGrid pattern={display.pattern}/>}
       <div className="choice-grid" role="group" aria-label="選項">
         {question.choices.map(choice => <button type="button" key={choice} disabled={answered || (!!question.audio && !audioIsOn())}
@@ -93,7 +93,7 @@ export function QuestionView({ question, grade, response, onSubmit, inputMode, h
       {question.given.length > 1 && <p className="given-notes">{question.given.map(n => n === '_' ? '＿' : displayNote(n)).join('  ')}</p>}
       {answered && response?.kind === 'construct'
         ? <p className="helper">你的答案：{response.notes.map(displayNote).join(' ')}</p>
-        : <NotePicker key={question.id} slots={question.expected.length} onSubmit={notes => onSubmit({ kind: 'construct', notes })}/>}
+        : <NotePicker autoSubmitSingle={question.templateId === 'interval.shapes.name'} key={question.id} slots={question.expected.length} onSubmit={notes => onSubmit({ kind: 'construct', notes })}/>}
     </div>
   }
 

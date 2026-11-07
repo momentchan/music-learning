@@ -1,5 +1,5 @@
 import type { FretLocateQuestion, Grade, Response } from './types'
-import { mod12, PC_SHARP } from '../music-theory/notes'
+import { displayNote, mod12, octaveOf, parseNote, PC_SHARP } from '../music-theory/notes'
 
 /** Ask for retrieval, keeping the exact pitch internal and target positions hidden. */
 export function playedQuestion(question: FretLocateQuestion): FretLocateQuestion {
@@ -26,12 +26,13 @@ export function responseFromPlayedNote(_question: unknown, midi: number): Respon
 export function validatePlayedNote(question: FretLocateQuestion, response: Extract<Response, { kind: 'played-note' }>): Grade {
   const correct = question.targetMidi === undefined ? mod12(response.midi) === question.targetPc : response.midi === question.targetMidi
   const name = (midi: number) => `${PC_SHARP[mod12(midi)]}${Math.floor(midi / 12) - 1}`
+  const target = question.interval ? `${displayNote(question.interval.target)}${octaveOf(question.interval.targetMidi - parseNote(question.interval.target).acc)}` : question.targetMidi === undefined ? question.targetLabel : name(question.targetMidi)
   return {
     result: correct ? 'correct' : 'incorrect', itemResults: {},
     verificationScope: question.targetMidi === undefined ? 'pitchClass' : 'exactPitch',
     errorClass: correct ? undefined : mod12(response.midi) === question.targetPc ? 'wrong-octave' : 'wrong-note',
-    feedback: correct ? '音高正確。請確認使用了指定的弦與把位。' : `聽到 ${name(response.midi)}，目標是 ${question.targetMidi === undefined ? question.targetLabel : name(question.targetMidi)}，請再試一次。`,
-    expectedText: question.targetMidi === undefined ? question.targetLabel : name(question.targetMidi),
+    feedback: correct ? '音高正確。請確認使用了指定的弦與把位。' : `聽到 ${name(response.midi)}，目標是 ${target}，請再試一次。`,
+    expectedText: target,
     responseText: name(response.midi),
   }
 }

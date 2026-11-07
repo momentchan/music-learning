@@ -1,3 +1,5 @@
+import { intervalNotes, intervalTitle, presentIntervalQuestion } from '../intervalQuestion'
+import { displayNote } from '../../music-theory/notes'
 import { createRng, int, pick, shuffle } from '../../lib/rng'
 import { STANDARD, midiAt, positionsOfPc, type StringNumber } from '../../music-theory/guitar'
 import { intervalLabel } from '../../music-theory/intervals'
@@ -170,37 +172,54 @@ function intervalShape(rng: () => number, difficulty: number, itemId?: string) {
 
 export const intervalShapes: ExerciseTemplate[] = [
   {
-    id: 'interval.shapes.locate', nodeId: 'interval.shapes', kind: 'fret-locate', version: 2, evidenceLevel: 'locate', stage: 'locate', title: '在指板上找音程',
+    id: 'interval.shapes.locate', nodeId: 'interval.shapes', kind: 'fret-locate', version: 3, evidenceLevel: 'locate', stage: 'locate', title: '在指板上找音程',
     items: () => SHAPE_INTERVALS.flatMap(i => [shapeItem(i.name, false), shapeItem(i.name, true)]),
     generate(seed, { difficulty, itemId }) {
       const rng = createRng(seed)
       const s = intervalShape(rng, difficulty, itemId)
       const rootMidi = midiAt(STANDARD, s.from, s.fret)
-      return {
+      return presentIntervalQuestion({
         ...questionBase(this, seed, difficulty), kind: 'fret-locate', tuning: TUNING, targetPc: mod12(rootMidi + s.interval.semis), targetLabel: pcLabel(rootMidi + s.interval.semis),
         string: s.to, targetMidi: rootMidi + s.interval.semis, minFret: 0, maxFret: 12, reference: { string: s.from, fret: s.fret, label: 'R' },
         prompt: `根音在${positionText(s.from, s.fret)}（${pcLabel(rootMidi)}）。在第 ${s.to} 弦找出往上的${intervalLabel(s.interval.name)}。`,
         reviewItemIds: [shapeItem(s.interval.name, s.gb)],
         explanation: `${intervalLabel(s.interval.name)} = ${s.interval.semis} 個半音。第 ${s.to} 弦比第 ${s.from} 弦高 ${s.gap} 個半音，所以要在第 ${s.to} 弦第 ${s.targetFret} 格${s.gb ? '（G–B 弦之間的形狀比其他弦組往高把位多一格）' : ''}。`,
         display: { positions: [[s.from, s.fret, 'R']] },
-      } satisfies FretLocateQuestion
+      } satisfies FretLocateQuestion)
     },
   },
   {
-    id: 'interval.shapes.identify', nodeId: 'interval.shapes', kind: 'choice', version: 2, evidenceLevel: 'recognize', stage: 'recall', title: '認出音程形狀',
+    id: 'interval.shapes.identify', nodeId: 'interval.shapes', kind: 'choice', version: 3, evidenceLevel: 'recognize', stage: 'recall', title: '認出音程形狀',
     items: () => SHAPE_INTERVALS.flatMap(i => [shapeItem(i.name, false), shapeItem(i.name, true)]),
     generate(seed, { difficulty, itemId }) {
       const rng = createRng(seed)
       const s = intervalShape(rng, difficulty, itemId)
       const names = SHAPE_INTERVALS.filter(i => i.level <= difficulty || i.name === s.interval.name).map(i => i.name)
       const choices = shuffle(rng, [s.interval.name, ...shuffle(rng, names.filter(n => n !== s.interval.name)).slice(0, 3)]).map(intervalLabel)
-      return {
+      return presentIntervalQuestion({
         ...questionBase(this, seed, difficulty), kind: 'choice', choices, answer: intervalLabel(s.interval.name),
         prompt: `從${positionText(s.from, s.fret)}（R）到${positionText(s.to, s.targetFret)}，往上是什麼音程？`,
         reviewItemIds: [shapeItem(s.interval.name, s.gb)],
         display: { positions: [[s.from, s.fret, 'R'], [s.to, s.targetFret, '?']] },
         explanation: `這組弦的空弦相差 ${s.gap} 個半音${s.gb ? '（跨過 G–B 弦）' : ''}：第 ${s.to} 弦第 ${s.targetFret} 格 = R + ${s.interval.semis} 個半音 = ${intervalLabel(s.interval.name)}。`,
-      } satisfies ChoiceQuestion
+      } satisfies ChoiceQuestion)
+    },
+  },
+  {
+    id: 'interval.shapes.name', nodeId: 'interval.shapes', kind: 'construct', version: 1,
+    evidenceLevel: 'recall', stage: 'recall', title: '回想音程的音名',
+    items: () => [...SHAPE_INTERVALS.map(i => `interval.name.${i.name}`), 'spell.interval'],
+    generate(seed, { difficulty, itemId }) {
+      const s = intervalShape(createRng(seed), difficulty, itemId?.replace('interval.name.', 'interval.shape.'))
+      const interval = intervalNotes(midiAt(STANDARD, s.from, s.fret), s.interval.name)
+      return {
+        ...questionBase(this, seed, difficulty), kind: 'construct', interval,
+        prompt: `${displayNote(interval.root)} 上方的${intervalTitle(interval.name)}是什麼音？`,
+        expected: [interval.target], given: [interval.root], ordered: true, spellingItemId: 'spell.interval',
+        reviewItemIds: [`interval.name.${interval.name}`, 'spell.interval'],
+        explanation: `${intervalTitle(interval.name)}相差 ${s.interval.semis} 個半音；度數決定字母，大小、完全或增減決定升降記號。`,
+        answerAudio: [{ notes: [interval.rootMidi], duration: 0.6 }, { notes: [interval.targetMidi], duration: 0.8 }],
+      }
     },
   },
 ]

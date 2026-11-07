@@ -153,13 +153,15 @@ export function buildGuidedSession(options: GuidedOptions): PlannedItem[] {
     const focus = options.focus
     const ids: Record<Exclude<PracticeFocus, 'notes'>, string[]> = {
       naming: ['fret.naturals.all.identify'], positions: ['fret.naturals.all.window'],
-      intervals: ['interval.shapes.locate'], 'chord-tones': ['chord.open.tones'],
+      intervals: ['interval.shapes.locate', 'interval.shapes.name'], 'chord-tones': ['chord.open.tones'],
     }
     const templates = ids[focus].map(id => templatesForNode(id.startsWith('chord') ? 'chord.open' : id.startsWith('interval') ? 'interval.shapes' : 'fret.naturals.all').find(t => t.id === id)!).filter(Boolean)
     const due = rankDueItems(options.reviews.values(), options.now).filter(r => templates.some(t => t.items().includes(r.itemId))).slice(0, 4)
     return Array.from({ length: GUIDED_BATCH }, (_, i) => {
-      const t = templates[i % templates.length]
-      return questionItem(t, deriveSeed(options.seed, i), focus === 'intervals' ? intervalPracticeDifficulty(options) : adaptiveDifficulty(options.mastery.get(t.nodeId), options.preference), i < due.length ? '到期複習' : t.title, due[i]?.itemId)
+      const t = templates[focus === 'intervals' ? ([2, 6].includes(i) ? 1 : 0) : i % templates.length]
+      const dueIndex = due.findIndex(r => t.items().includes(r.itemId))
+      const review = dueIndex < 0 ? undefined : due.splice(dueIndex, 1)[0]
+      return questionItem(t, deriveSeed(options.seed, i), focus === 'intervals' ? intervalPracticeDifficulty(options) : adaptiveDifficulty(options.mastery.get(t.nodeId), options.preference), review ? '到期複習' : t.title, review?.itemId)
     })
   }
   const plan = buildNotePractice({ ...options, attempts: options.attempts ?? [], practiceContext: options.practiceContext ?? 'pocket' })

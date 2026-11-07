@@ -251,3 +251,14 @@ it('interval pitch practice advances its own difficulty without granting locatio
   const plan = buildGuidedSession({ ...base, attempts: first, focus: 'intervals' })
   expect(plan.every(p => p.kind === 'question' && p.question.difficulty === 2)).toBe(true)
 })
+
+it('interleaves two naming recalls with six position tasks without mixing review items', () => {
+  const options = { seed: 12, now: T0, audio: false, reviews: new Map(), mastery: new Map(), preference: 'auto' as const, focus: 'intervals' as const }
+  const plan = buildGuidedSession(options)
+  expect(buildGuidedSession(options)).toEqual(plan)
+  expect(plan.filter(p => p.kind === 'question' && p.question.kind === 'fret-locate')).toHaveLength(6)
+  expect(plan.filter(p => p.kind === 'question' && p.question.kind === 'construct')).toHaveLength(2)
+  for (const item of plan) if (item.kind === 'question') {
+    expect(item.question.reviewItemIds[0]).toMatch(item.question.kind === 'construct' ? /^interval.name./ : /^interval.shape./)
+  }
+})

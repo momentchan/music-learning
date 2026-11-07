@@ -93,6 +93,7 @@ function validateLocate(q: FretLocateQuestion, r: { string: number; fret: number
       ? `差一格。跨過第 3 弦（G）到第 2 弦（B）時，因為這兩條弦相差大三度（其他相鄰弦是完全四度），形狀要往${sameStringTarget.fret > r.fret ? '高' : '低'}把位移一格。`
       : `差一格：你點的是 ${responseText}，正確位置在${positionText(sameStringTarget.string, sameStringTarget.fret)}。`
   }
+  if (q.interval) feedback = errorClass === 'wrong-string' ? '音名對了，請在標示的目標弦作答。' : errorClass === 'wrong-octave' ? `八度不同：你選的是 ${midiName(midi)}。` : `你選的是 ${midiName(midi)}${errorClass === 'off-by-one' || errorClass === 'gb-offset' ? '，差一格' : ''}。`
   return { result: 'incorrect', itemResults: all(q, false), errorClass, feedback, expectedText, responseText, correctPositions: targets }
 }
 
@@ -108,7 +109,7 @@ function validateConstruct(q: ConstructQuestion, r: { notes: string[] }): Grade 
     ? given.every((n, i) => sameSpelling(n, expected[i]))
     : expected.every(e => given.some(n => sameSpelling(n, e))))
   const itemResults: Record<string, boolean> = {}
-  for (const id of q.reviewItemIds) if (id !== q.spellingItemId) itemResults[id] = pitchOk
+  for (const id of q.reviewItemIds) if (id !== q.spellingItemId) itemResults[id] = q.interval ? spellingOk : pitchOk
   if (pitchOk) itemResults[q.spellingItemId] = spellingOk
   const expectedText = expected.map(noteLabel).join(' ')
   const responseText = given.map(noteLabel).join(' ') || '（未作答）'
@@ -117,7 +118,7 @@ function validateConstruct(q: ConstructQuestion, r: { notes: string[] }): Grade 
     const wrong = given.filter(n => !expected.some(e => sameSpelling(n, e)))
     const fixes = wrong.map(n => `${noteLabel(n)} → ${noteLabel(expected.find(e => pitchClass(e) === pitchClass(n))!)}`).join('、')
     return { result: 'partial', itemResults, errorClass: 'spelling',
-      feedback: `音高正確，但拼法不對：${fixes}。和弦與音階裡每個字母依序各用一次，所以要用這個字母來寫。`, expectedText, responseText }
+      feedback: `音高正確，但拼法不對：${fixes}。${q.interval ? '音程的度數決定字母，不能只用同音異名替代。' : '和弦與音階裡每個字母依序各用一次，所以要用這個字母來寫。'}`, expectedText, responseText }
   }
   let errorClass = 'wrong-notes'
   let feedback = `正確答案是 ${expectedText}。`
