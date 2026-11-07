@@ -4,6 +4,7 @@ import { NODES, PATHWAYS, UNLISTED_NODE_IDS, nodeById, type SkillNode } from '..
 import { templatesForNode } from '../exercise-engine/registry'
 import { t } from '../i18n/zh-TW'
 import { NODE_STATE_LABEL, type NodeMastery } from '../learning/mastery'
+import { resumeListening } from '../audio/mic'
 import { audioIsOn } from '../stores/audioUi'
 import { useLearning } from '../stores/learning'
 import { LessonContentView } from './session/LessonCard'
@@ -59,6 +60,7 @@ export function NodeScreen({ nodeId }: { nodeId: string }) {
   const silentOnly = templates.every(tpl => tpl.requiresAudio) && !audio
 
   async function begin(kind: 'lesson' | 'free') {
+    if (learning.preferences.answerInput === 'play') resumeListening()
     try {
       const id = kind === 'lesson' ? await learning.startLesson(node!.id, audio) : await learning.startFree([node!.id], 10, audio)
       navigate(`/session/${id}`)

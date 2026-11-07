@@ -106,6 +106,14 @@
 .shared-fretboard.is-playing.is-left svg{transform:scaleX(-1)}
 .shared-fretboard.is-playing.is-left svg text{transform:scaleX(-1);transform-box:fill-box;transform-origin:center}
 .playing-hint{margin:8px 0 0}
+.answer-input{display:block;margin:0 0 12px}
+.answer-input select{display:block;width:100%;margin-top:6px;min-height:44px}
+.answer-input .helper{display:block;margin-top:6px}
+.play-listen{display:flex;justify-content:center;margin-top:8px}
+.mic-button{border:0;background:transparent;padding:4px;min-width:48px;min-height:48px}
+.mic-mark{overflow:visible;transform-origin:center;transition:transform .08s linear}
+.mic-mark:not(.is-live){animation:mic-listen 1.4s ease-in-out infinite}
+@keyframes mic-listen{0%,100%{opacity:.45}50%{opacity:1}}
 @media (orientation:landscape) and (max-height:520px){
   .session-page.app-shell{height:100dvh;min-height:0;overflow:hidden;padding-bottom:0}
   .session-page .topbar{display:none}
