@@ -1,6 +1,7 @@
-import { Fretboard as SharedFretboard, type FretMark } from '../../components/fretboard/Fretboard'
+import type { FretMark } from '../../components/fretboard/Fretboard'
+import { PracticeBoard } from '../../components/fretboard/PracticeBoard'
 import { useLearning } from '../../stores/learning'
-import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { audioEngine } from '../../audio/AudioEngine'
 import { db, saveAttempt, type AudioAttempt } from '../../data/db'
 import { COMPARISONS, comparisonEvents } from '../../music/comparisons'
@@ -26,21 +27,11 @@ const EAR_TYPES: { id: EarType; label: string }[] = [
   { id: 'progression', label: '和弦進行' },
 ]
 
-const MOBILE_FRET_WIRES = [32]
-for (let fret = 1; fret <= 12; fret++) {
-  MOBILE_FRET_WIRES.push(MOBILE_FRET_WIRES[fret - 1] + Math.max(40, 54 * Math.pow(2, -(fret - 1) / 12)))
-}
-const MOBILE_FRETBOARD_HEIGHT = Math.ceil(MOBILE_FRET_WIRES[12]) + 32
-
 export function Fretboard({ run, purpose = 'reference' }: { run: (fn: () => Promise<unknown>) => Promise<void>; purpose?: 'reference' | 'all-positions' }) {
   const practice = purpose === 'all-positions'
   const [selected, setSelected] = useState<{ string: number; fret: number; midi: number } | null>(null)
   const [showAll, setShowAll] = useState(false)
-  const [narrow, setNarrow] = useState(() => window.matchMedia('(max-width: 700px)').matches)
-  const boardRef = useRef<HTMLDivElement>(null)
-  const [mobileHeight, setMobileHeight] = useState(MOBILE_FRETBOARD_HEIGHT)
-  const { preferences, savePreferences } = useLearning()
-  const vertical = narrow || (practice && preferences.practiceLayout === 'vertical')
+  const { preferences } = useLearning()
   const [note, setNote] = useState('C')
   const [found, setFound] = useState<string[]>([])
   const [feedback, setFeedback] = useState('')
@@ -51,28 +42,8 @@ export function Fretboard({ run, purpose = 'reference' }: { run: (fn: () => Prom
   const sessionId = useRef(crypto.randomUUID())
   const [formString, setFormString] = useState(1)
   const [formFret, setFormFret] = useState(1)
-  const targets = positionsForNote(note)
+  const targets = [...positionsForNote(note), ...STANDARD_TUNING.flatMap((midi, index) => SHARPS[midi % 12] === note ? [{ string: 6 - index, fret: 0, midi }] : [])]
   const done = found.length === targets.length
-  useEffect(() => {
-    const query = window.matchMedia('(max-width: 700px)')
-    const changed = () => setNarrow(query.matches)
-    query.addEventListener('change', changed)
-    return () => query.removeEventListener('change', changed)
-  }, [])
-  useLayoutEffect(() => {
-    if (!narrow || !boardRef.current) return
-    const board = boardRef.current
-    const measure = () => {
-      const bounds = board.getBoundingClientRect()
-      const nav = document.querySelector('.bottom-nav')?.getBoundingClientRect().height ?? 0
-      const available = (window.visualViewport?.height ?? window.innerHeight) - nav - 8 - bounds.top - window.scrollY
-      if (bounds.width) setMobileHeight(Math.min(MOBILE_FRETBOARD_HEIGHT, Math.max(160, available * 300 / bounds.width)))
-    }
-    const observer = new ResizeObserver(measure); observer.observe(board)
-    if (board.previousElementSibling) observer.observe(board.previousElementSibling)
-    window.addEventListener('resize', measure); window.visualViewport?.addEventListener('resize', measure); measure()
-    return () => { observer.disconnect(); window.removeEventListener('resize', measure); window.visualViewport?.removeEventListener('resize', measure) }
-  }, [narrow])
   useEffect(() => {
     if (!practice) return
     void db.attempts.where('exerciseType').equals('fretboard.find-note').toArray().then(setQuizAttempts).catch(() => setError('無法讀取紀錄。'))
@@ -92,9 +63,9 @@ export function Fretboard({ run, purpose = 'reference' }: { run: (fn: () => Prom
     try {
       const now = Date.now()
       const record = await saveAttempt({ id: crypto.randomUUID(), sessionId: sessionId.current, exerciseType: 'fretboard.find-note', topicId: `fretboard.note.${note}`,
-        question: { mode: 'one-note', targetNote: note, frets: [1, 12] }, response: `String ${string}, fret ${fret}, ${noteName(midi)}`, expected: note,
+        question: { mode: 'one-note', targetNote: note, frets: [0, 12] }, response: `String ${string}, fret ${fret}, ${noteName(midi)}`, expected: note,
         correct, responseMs: Math.max(0, now - startedAt.current), replays: 0, difficulty: 1, timestamp: now, string, fret, note, mode: 'one-note', targetString: string,
-        targetFret: targets.find(p => p.string === string)!.fret, assisted: false })
+        targetFret: correct ? fret : targets.find(p => p.string === string)!.fret, assisted: false })
       setQuizAttempts(previous => [...previous, record]); startedAt.current = now
     } catch { setError('答案已判斷，但尚未保存。') } finally { pending.current = false }
   }
@@ -105,16 +76,14 @@ export function Fretboard({ run, purpose = 'reference' }: { run: (fn: () => Prom
     <div className="fretboard-controls">
       <div className="section-head"><h3>{practice ? '找出同音的所有位置' : '指板查詢'}</h3><button className="subtle-button" disabled={practice && !done} onClick={() => setShowAll(!showAll)}>{showAll ? '隱藏音名' : '顯示音名'}</button></div>
       {practice && <div className="fretboard-quiz"><div><strong>{note}<em>{found.length} / {targets.length}</em></strong><small role="status">{feedback || '在每條弦找出這個音'}</small></div><label>練習音名<select value={note} onChange={e => changeNote(e.target.value)}>{SHARPS.map(n => <option key={n}>{n}</option>)}</select></label>{done && <button className="secondary-button" onClick={() => changeNote(SHARPS[(SHARPS.indexOf(note as typeof SHARPS[number]) + 1) % 12])}>下一個音 →</button>}</div>}
-      {practice && !narrow && <div className="fretboard-modes" role="group" aria-label="指板視角"><button aria-pressed={preferences.practiceLayout === 'vertical'} onClick={() => void savePreferences({ practiceLayout: 'vertical' })}>教材直式</button><button aria-pressed={preferences.practiceLayout === 'horizontal'} onClick={() => void savePreferences({ practiceLayout: 'horizontal' })}>TAB 橫式</button></div>}
+
       {error && <p role="alert">{error}</p>}
     </div>
-    <div ref={boardRef} className="fretboard-scroll" role="region" aria-label="完整指板">
-      <SharedFretboard tuning={STANDARD_TUNING} minFret={1} maxFret={12} orientation={vertical ? 'vertical' : practice ? 'horizontal' : 'playing'} leftHanded={preferences.leftHanded} fitHeight={vertical ? (narrow ? mobileHeight : MOBILE_FRETBOARD_HEIGHT) * 340 / 300 : undefined}
-        marks={marks} showNoteNames={showAll} onSelect={(string, fret) => void choose(string, fret)} label="六弦吉他指板，第 1–12 格"
-        cellLabel={(string, fret) => `String ${string}, fret ${fret}${!practice || done ? `, ${noteName(STANDARD_TUNING[6 - string] + fret)}` : ''}`}/>
-    </div>
+    <PracticeBoard tuning={STANDARD_TUNING} minFret={0} maxFret={12} leftHanded={preferences.leftHanded}
+      marks={marks} showNoteNames={showAll} onSelect={(string, fret) => void choose(string, fret)} label="六弦吉他指板，第 0–12 格"
+      cellLabel={(string, fret) => `String ${string}, fret ${fret}${!practice || done ? `, ${noteName(STANDARD_TUNING[6 - string] + fret)}` : ''}`}/>
     <div className="selected-note"><div><strong>{selected ? noteName(selected.midi) : '點選位置'}</strong><small>{selected ? `第 ${selected.string} 弦 · 第 ${selected.fret} 格` : ''}</small></div>{selected && <button className="secondary-button" onClick={() => void run(() => audioEngine.playNote(selected.midi))}>重播</button>}</div>
-    <details className="position-controls"><summary>用選單選取位置</summary><div className="field-row"><label>弦<select value={formString} onChange={e => setFormString(Number(e.target.value))}>{[1,2,3,4,5,6].map(n => <option key={n}>{n}</option>)}</select></label><label>格<select value={formFret} onChange={e => setFormFret(Number(e.target.value))}>{Array.from({ length: 12 }, (_, i) => <option key={i}>{i + 1}</option>)}</select></label></div><button className="secondary-button" onClick={() => void choose(formString, formFret)}>{practice ? '送出位置' : '查看與試聽'}</button></details>
+    <details className="position-controls"><summary>用選單選取位置</summary><div className="field-row"><label>弦<select value={formString} onChange={e => setFormString(Number(e.target.value))}>{[1,2,3,4,5,6].map(n => <option key={n}>{n}</option>)}</select></label><label>格<select value={formFret} onChange={e => setFormFret(Number(e.target.value))}>{Array.from({ length: 13 }, (_, i) => <option key={i}>{i}</option>)}</select></label></div><button className="secondary-button" onClick={() => void choose(formString, formFret)}>{practice ? '送出位置' : '查看與試聽'}</button></details>
     {practice && <p className="helper">{history.filter(a => a.correct).length} 次正確 · {history.filter(a => !a.correct).length} 次待加強</p>}
   </section>
 }

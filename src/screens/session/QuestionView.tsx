@@ -1,7 +1,7 @@
 import { playedQuestion } from '../../exercise-engine/playedAnswer'
 import { PracticeBoard } from '../../components/fretboard/PracticeBoard'
 import { ChordDiagram } from '../../components/diagram/ChordDiagram'
-import { Fretboard, type FretMark } from '../../components/fretboard/Fretboard'
+import type { FretMark } from '../../components/fretboard/Fretboard'
 import { NotePicker, PitchPicker } from '../../components/NotePicker'
 import { Calibration, PatternGrid, RhythmPad } from '../../components/rhythm/RhythmPad'
 import { locateTargets } from '../../exercise-engine/validate'
@@ -16,12 +16,13 @@ interface Props {
   grade: Grade | null
   response: Response | null
   onSubmit: (response: Response) => void
+  hinted: boolean
+  onHint: () => void
   inputMode: 'tap' | 'play'
-  layout: 'vertical' | 'horizontal'
 }
 
 /** Renders one question and captures a real response. Validation happens in the runner against the stored question. */
-export function QuestionView({ question, grade, response, onSubmit, layout, inputMode }: Props) {
+export function QuestionView({ question, grade, response, onSubmit, inputMode, hinted, onHint }: Props) {
   const answered = grade !== null
   const play = useAudioUi(s => s.play)
   const leftHanded = useLearning(s => s.preferences.leftHanded)
@@ -44,7 +45,7 @@ export function QuestionView({ question, grade, response, onSubmit, layout, inpu
       <h2 className="question-prompt">{question.prompt}</h2>
       {audioButton}
       {shape && <div className="question-visual"><ChordDiagram leftHanded={leftHanded} shape={shape} size={170} showName={false}/></div>}
-      {display?.positions && <div className="question-visual board"><Fretboard leftHanded={leftHanded} tuning={[40, 45, 50, 55, 59, 64]} orientation={layout} label="題目位置"
+      {display?.positions && <div className="question-visual board"><PracticeBoard focusFret={display.positions[0]?.[1]} leftHanded={leftHanded} tuning={[40, 45, 50, 55, 59, 64]} label="題目位置"
         marks={display.positions.map(([string, fret, label]) => ({ string, fret, label, tone: label === 'R' ? 'root' : 'target' }))}/></div>}
       {display?.pattern && <PatternGrid pattern={display.pattern}/>}
       <div className="choice-grid" role="group" aria-label="選項">
@@ -61,7 +62,7 @@ export function QuestionView({ question, grade, response, onSubmit, layout, inpu
     const marks: FretMark[] = [{ string: question.string, fret: question.fret, label: answered ? displayNote(['C', 'C#', 'D', 'Eb', 'E', 'F', 'F#', 'G', 'Ab', 'A', 'Bb', 'B'][question.answerPc]) : '?', tone: answered ? (grade!.result === 'correct' ? 'correct' : 'target') : 'target' }]
     return <div className="question">
       <h2 className="question-prompt">{question.prompt}</h2>
-      <div className="question-visual board"><Fretboard leftHanded={leftHanded} tuning={question.tuning} orientation={layout} marks={marks} label={`指板，題目位置：第 ${question.string} 弦 ${question.fret === 0 ? '空弦' : `第 ${question.fret} 格`}`}/></div>
+      <div className="question-visual board"><PracticeBoard focusFret={question.fret} highlightedString={question.string} leftHanded={leftHanded} tuning={question.tuning} marks={marks} label={`指板，題目位置：第 ${question.string} 弦 ${question.fret === 0 ? '空弦' : `第 ${question.fret} 格`}`}/></div>
       <PitchPicker disabled={answered} onPick={value => onSubmit({ kind: 'fret-identify', value })}/>
       {answered && response?.kind === 'fret-identify' && <p className="helper">你的答案：{displayNote(response.value)}</p>}
     </div>
@@ -71,16 +72,17 @@ export function QuestionView({ question, grade, response, onSubmit, layout, inpu
     const marks: FretMark[] = []
     if (question.reference) marks.push({ string: question.reference.string, fret: question.reference.fret, label: question.reference.label, tone: 'reference' })
     if (!answered && question.allowedPositions && question.display?.positions) marks.push(...question.display.positions.map(([string, fret, label]) => ({ string, fret, label, tone: 'neutral' as const })))
-    if (byEar && !answered && question.display?.positions) marks.push(...question.display.positions.map(([string, fret, label]) => ({ string, fret, label, tone: 'target' as const })))
+    if (!answered && hinted) for (const p of locateTargets(question)) marks.push({ ...p, label: question.targetLabel.split(' ')[0], tone: 'target' })
     if (answered) {
       for (const p of grade!.correctPositions ?? locateTargets(question)) marks.push({ string: p.string, fret: p.fret, label: question.targetLabel.split(' ')[0], tone: 'correct' })
       if (response?.kind === 'fret-locate' && grade!.result !== 'correct') marks.push({ string: response.string, fret: response.fret, label: '✕', tone: 'wrong' })
     }
     return <div className="question playing">
       <h2 className="question-prompt">{question.prompt}</h2>
-      <PracticeBoard leftHanded={leftHanded} tuning={question.tuning} minFret={question.minFret} maxFret={question.maxFret}
+      <PracticeBoard focusFret={hinted || answered ? (grade?.correctPositions ?? locateTargets(question))[0]?.fret : undefined} highlightedString={question.string} leftHanded={leftHanded} tuning={question.tuning} minFret={question.minFret} maxFret={question.maxFret}
         marks={marks} onSelect={byEar ? undefined : (string, fret, inputMethod) => { if (!answered) onSubmit({ kind: 'fret-locate', string, fret, inputMethod }) }} disabled={answered || byEar}
-        label={byEar ? '照圖彈奏，App 檢查音高' : '可點選的指板，上方第 1 弦、下方第 6 弦，點一下送出'}/>
+        label={byEar ? `目標第 ${question.string ?? '任意'} 弦，找出指定音並彈奏，作答前不顯示答案位置` : '可點選的指板，上方第 1 弦、下方第 6 弦，點一下送出'}/>
+      {!answered && <button type="button" className="text-button" disabled={hinted} onClick={onHint}>{hinted ? '已顯示提示' : '提示位置'}</button>}
 
     </div>
   }

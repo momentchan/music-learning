@@ -5,6 +5,7 @@ import { NoteGate } from '../../audio/noteGate'
 import type { Response } from '../../exercise-engine/types'
 
 interface Props {
+  autoStart?: boolean
   disabled: boolean
   targetId: string
   paused: boolean
@@ -23,9 +24,9 @@ const describeError = (error: unknown) => {
 }
 
 /** The meter and candidate pitch are independent of grading, so a rejected note is still visible. */
-export function PlayListener({ disabled, targetId, paused, onNote, onFallback, onPitch }: Props) {
-  const [enabled, setEnabled] = useState(false)
-  const [phase, setPhase] = useState<MicState>('off')
+export function PlayListener({ autoStart = false, disabled, targetId, paused, onNote, onFallback, onPitch }: Props) {
+  const [enabled, setEnabled] = useState(autoStart)
+  const [phase, setPhase] = useState<MicState>(autoStart ? 'requesting' : 'off')
   const [status, setStatus] = useState('按開始收音，允許麥克風後就能彈奏。')
   const [heard, setHeard] = useState('')
   const [level, setLevel] = useState(0)
@@ -37,7 +38,7 @@ export function PlayListener({ disabled, targetId, paused, onNote, onFallback, o
   const latest = useRef({ disabled, onNote, onPitch })
   latest.current = { disabled, onNote, onPitch }
   useEffect(() => { gate.current.reset(); if (!disabled) setHeard('') }, [targetId, disabled])
-  useEffect(() => { if (paused) { setEnabled(false); setPhase('off'); setLevel(0) } }, [paused])
+  useEffect(() => { if (paused) { setPhase('off'); setLevel(0) } else if (autoStart) setEnabled(true) }, [paused, autoStart])
   useEffect(() => {
     const hide = () => { if (document.hidden) { setEnabled(false); setPhase('off'); setLevel(0) } }
     document.addEventListener('visibilitychange', hide)
@@ -57,6 +58,9 @@ export function PlayListener({ disabled, targetId, paused, onNote, onFallback, o
     gate.current.reset(false)
     void (async () => {
       try {
+        // Defer acquisition so a cancelled mount never opens a second input stream.
+        await Promise.resolve()
+        if (stopped) return
         if (!navigator.mediaDevices?.getUserMedia) throw new Error('Microphone unavailable')
         stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false, ...(deviceId ? { deviceId: { exact: deviceId } } : {}) } })
         if (stopped) { stream.getTracks().forEach(t => t.stop()); return }
@@ -114,7 +118,7 @@ export function PlayListener({ disabled, targetId, paused, onNote, onFallback, o
   }, [enabled, paused, deviceId, restart])
   const start = () => { resumeListening(); setEnabled(true); setRestart(n => n + 1) }
   return <section className="play-listen" aria-label="吉他收音">
-    <div role="status"><strong>{phase === 'error' ? '收音未啟動' : heard || (phase === 'listening' ? '麥克風已連線' : phase === 'requesting' ? '等待麥克風權限' : '收音已停止')}</strong>{enabled && <p>{status}</p>}</div>
+    <div role="status"><strong>{phase === 'error' ? '收音未啟動' : heard || (phase === 'listening' ? '麥克風已連線' : phase === 'requesting' ? '等待麥克風權限' : paused ? '已暫停' : '收音已停止')}</strong>{enabled && <p>{status}</p>}</div>
     <label className="mic-level-label">輸入音量<meter aria-label="麥克風輸入音量" min="0" max="100" value={level}/></label>
     {enabled && <p className="helper mic-device">輸入：{deviceName}</p>}
     {devices.filter(d => d.deviceId !== 'default' && d.deviceId !== 'communications').length > 1 && <label>輸入麥克風<select aria-label="輸入麥克風" value={deviceId} onChange={e => { resumeListening(); setDeviceId(e.target.value) }}><option value="">瀏覽器預設</option>{devices.filter(d => d.deviceId !== 'default' && d.deviceId !== 'communications').map(d => <option key={d.deviceId} value={d.deviceId}>{d.label || '其他麥克風'}</option>)}</select></label>}

@@ -49,17 +49,22 @@ for (const size of [{ width: 320, height: 568 }, { width: 390, height: 650 }, { 
     const page = await context.newPage()
     await page.goto('/lab/fretboard')
     const board = page.locator('svg.fretboard')
-    expect(await page.locator('.svg-string-label').allTextContents()).toEqual(['6','5','4','3','2','1'])
-    await expect(board.locator(':scope > .svg-fret-label')).toHaveCount(12)
+    expect(await page.locator('.svg-string-label').allTextContents()).toEqual(['1','2','3','4','5','6'])
+    await expect(board.locator(':scope > .svg-fret-label')).toHaveCount(4)
     await board.locator('g[aria-label="String 6, fret 1, F2"]').tap()
     await expect(page.locator('.selected-note strong')).toHaveText('F2')
     await page.getByRole('button', { name: '顯示音名', exact: true }).click()
-    await expect(board.locator('.svg-note')).toHaveCount(72)
+    await expect(board.locator('.svg-note')).toHaveCount(24)
     await page.goto('/practice/positions')
     await page.getByLabel('練習音名').selectOption('E')
-    for (const [index, p] of positionsForNote('E').entries()) {
+    for (const [index, p] of [...positionsForNote('E'), { string: 1, fret: 0 }, { string: 6, fret: 0 }].entries()) {
+      const cell = page.locator(`svg.fretboard g[aria-label="String ${p.string}, fret ${p.fret}"]`)
+      if (!await cell.isVisible()) {
+        const low = Math.min(9, Math.floor(p.fret / 3) * 3)
+        await page.getByRole('button', { name: `${low}–${low + 3} 格`, exact: true }).tap()
+      }
       await page.locator(`svg.fretboard g[aria-label="String ${p.string}, fret ${p.fret}"]`).tap()
-      await expect(page.locator('.fretboard-quiz em')).toHaveText(`${index + 1} / 6`)
+      await expect(page.locator('.fretboard-quiz em')).toHaveText(`${index + 1} / 8`)
     }
     await expect(page.getByRole('button', { name: '下一個音 →' })).toBeVisible()
     const scale = await page.locator('svg.fretboard').evaluate(el => { const m = (el as SVGSVGElement).getScreenCTM()!; return [m.a, m.d] })

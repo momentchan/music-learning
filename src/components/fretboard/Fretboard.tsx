@@ -7,14 +7,14 @@ export interface FretMark { string: number; fret: number; label?: string; tone: 
 export interface FretboardProps {
   tuning: readonly number[]; minFret?: number; maxFret?: number; orientation: BoardOrientation
   marks?: FretMark[]; showNoteNames?: boolean; onSelect?: (string: number, fret: number, inputMethod?: 'tap' | 'keyboard') => void
-  fitHeight?: number; cellLabel?: (string: number, fret: number) => string; selectableRange?: readonly [number, number]; disabled?: boolean; label: string; leftHanded?: boolean
+  highlightedString?: number; fitHeight?: number; cellLabel?: (string: number, fret: number) => string; selectableRange?: readonly [number, number]; disabled?: boolean; label: string; leftHanded?: boolean
 }
 export const positionLabel = (string: number, fret: number) => `第 ${string} 弦 ${fret === 0 ? '空弦' : `第 ${fret} 格`}`
 const COLORS: Record<MarkTone, string> = { root: '#e9ae6a', reference: '#e9ae6a', target: '#397191', selected: '#d16f55', correct: '#287a58', wrong: '#9c443d', neutral: '#334351' }
 const LABELS: Record<MarkTone, string> = { root: '根音', reference: '參考', target: '目標', selected: '選取', correct: '正確', wrong: '錯誤', neutral: '標示' }
 
 /** Shared projection for course, explorer, feedback and progress. Music coordinates never mirror. */
-export function Fretboard({ tuning, minFret = 0, maxFret = 12, orientation, marks = [], showNoteNames = false, onSelect, disabled, label, leftHanded = false, selectableRange, fitHeight, cellLabel }: FretboardProps) {
+export function Fretboard({ tuning, minFret = 0, maxFret = 12, orientation, marks = [], showNoteNames = false, onSelect, disabled, label, leftHanded = false, selectableRange, fitHeight, cellLabel, highlightedString }: FretboardProps) {
   const ref = useRef<SVGSVGElement>(null)
   const gesture = useRef<{ x: number; y: number; moved: boolean } | null>(null)
   const order = stringOrder(orientation, leftHanded)
@@ -63,8 +63,11 @@ export function Fretboard({ tuning, minFret = 0, maxFret = 12, orientation, mark
       })}
       {order.map(string => {
         const a = project(string, minFret), b = project(string, maxFret)
-        return <g key={string}>
-          <line x1={vertical ? a.x : Math.min(edge(0), edge(frets.length))} x2={vertical ? a.x : Math.max(edge(0), edge(frets.length))} y1={vertical ? edge(0) : a.y} y2={vertical ? edge(frets.length) : a.y} stroke="#c5bdb1" strokeWidth={1 + (string - 1) * .35}/>
+        return <g key={string} data-string={string} data-target-string={string === highlightedString ? 'true' : undefined}>
+          {string === highlightedString && (vertical
+            ? <rect x={a.x - 12} y={edge(0)} width="24" height={edge(frets.length) - edge(0)} fill="#efb66e" opacity=".12"/>
+            : <rect x={Math.min(edge(0), edge(frets.length))} y={a.y - 12} width={Math.abs(edge(frets.length) - edge(0))} height="24" fill="#efb66e" opacity=".12"/>)}
+          <line x1={vertical ? a.x : Math.min(edge(0), edge(frets.length))} x2={vertical ? a.x : Math.max(edge(0), edge(frets.length))} y1={vertical ? edge(0) : a.y} y2={vertical ? edge(frets.length) : a.y} stroke={string === highlightedString ? '#efb66e' : '#c5bdb1'} strokeWidth={1 + (string - 1) * .35}/>
           <text x={vertical ? a.x : mirror ? width - 16 : 16} y={vertical ? 20 : a.y + 4} textAnchor="middle" className="svg-string-label">{string}</text>
         </g>
       })}

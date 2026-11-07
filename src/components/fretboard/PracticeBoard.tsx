@@ -1,9 +1,9 @@
-import { useState, useSyncExternalStore } from 'react'
+import { useEffect, useState, useSyncExternalStore } from 'react'
 import { Fretboard, type FretboardProps } from './Fretboard'
 import { FRET_WINDOWS } from './projection'
 
 /** A small overview preserves orientation; only the full-size local neck accepts answers. */
-export function PracticeBoard(props: Omit<FretboardProps, 'orientation'>) {
+export function PracticeBoard({ focusFret, ...props }: Omit<FretboardProps, 'orientation'> & { focusFret?: number }) {
   const narrow = useSyncExternalStore(listener => {
     const query = window.matchMedia('(max-width: 700px)')
     query.addEventListener('change', listener)
@@ -11,7 +11,11 @@ export function PracticeBoard(props: Omit<FretboardProps, 'orientation'>) {
   }, () => window.matchMedia('(max-width: 700px)').matches, () => false)
   const lo = props.minFret ?? 0, hi = props.maxFret ?? 12
   const windows: readonly (readonly [number, number])[] = hi - lo <= 3 ? [[lo, hi]] : FRET_WINDOWS.filter(([a,b]) => b >= lo && a <= hi).map(([a,b]) => [Math.max(a, lo), Math.min(b, hi)] as const)
-  const [range, setRange] = useState(0)
+  const [range, setRange] = useState(() => focusFret == null ? 0 : Math.max(0, windows.findIndex(([a,b]) => a <= focusFret && focusFret <= b)))
+  useEffect(() => {
+    if (focusFret == null) return
+    setRange(Math.max(0, windows.findIndex(([a, b]) => a <= focusFret && focusFret <= b)))
+  }, [focusFret, lo, hi])
   const [whole, setWhole] = useState(false)
   const [min, max] = windows[Math.min(range, windows.length - 1)]
   const limit = props.maxFret ?? 12

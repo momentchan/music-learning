@@ -15,10 +15,21 @@ describe('microphone evidence', () => {
   it('explicit position variants check the octave, while unrestricted note names accept any octave', () => {
     const exact = playedQuestion(q)
     expect(exact).toMatchObject({ targetMidi: 48, prompt: expect.stringContaining('C3') })
+    expect(exact.prompt).toBe('找出 C3，並彈出來')
+    expect(exact.prompt).not.toContain('第 3 格')
+    expect(exact.display?.positions).toBeUndefined()
     expect(validate(exact, { kind: 'played-note', midi: 48 }).result).toBe('correct')
     expect(validate(exact, { kind: 'played-note', midi: 60 })).toMatchObject({ result: 'incorrect', errorClass: 'wrong-octave' })
     expect(validate(q, { kind: 'played-note', midi: 60 }).result).toBe('correct')
     expect(validate(exact, { kind: 'played-note', midi: 47 }).result).toBe('incorrect')
+  })
+  it('keeps the target internal while supporting accidental spellings and an existing exact target', () => {
+    const accidental = { ...q, targetPc: 1, targetLabel: 'C♯ / D♭', display: { positions: [[5, 4, 'C♯']] as [number, number, string][] } }
+    const played = playedQuestion(accidental)
+    expect(played.prompt).toBe('找出 C♯3，並彈出來')
+    expect(played.targetMidi).toBe(49)
+    expect(played.display?.positions).toBeUndefined()
+    expect(playedQuestion(played)).toEqual(played)
   })
   it('cannot answer note-naming questions or map impossible pitches to a convenient position', () => {
     const identify = generate('fret.naturals.all.identify', 4, 1)

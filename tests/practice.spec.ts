@@ -7,6 +7,13 @@ async function startPractice(page: Page) {
   if (await intro.isVisible()) await intro.click()
 }
 
+async function requestedMidi(page: Page) {
+  const text = await page.locator('.question-prompt').textContent()
+  const match = /([A-G])([♯♭#b]?)([2-5])/.exec(text!)!
+  const pc: Record<string, number> = { C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, B: 11 }
+  return (Number(match[3]) + 1) * 12 + pc[match[1]] + (['♯', '#'].includes(match[2]) ? 1 : ['♭', 'b'].includes(match[2]) ? -1 : 0)
+}
+
 async function attempts(page: Page) {
   return page.evaluate(async () => {
     const db = await new Promise<IDBDatabase>((resolve, reject) => {
@@ -66,7 +73,7 @@ test('portrait practice has large targets, no swipe answer, correct keyboard map
 
 test('instrument answers verify the actual octave without granting position recall, and release the microphone', async ({ page }, info) => {
   await page.addInitScript(() => {
-    const state = window as Window & { micCalls: number; stopped: boolean; fakePluck: (midi: number) => void }
+    const state = window as Window & { micCalls: number; stopped: boolean; fakePluck: (midi: number, seconds?: number) => void }
     state.micCalls = 0; state.stopped = false
     Object.defineProperty(navigator.mediaDevices, 'getUserMedia', { value: async () => {
       state.micCalls++
@@ -78,7 +85,7 @@ test('instrument answers verify the actual octave without granting position reca
       const track = output.stream.getAudioTracks()[0]
       const stop = track.stop.bind(track)
       track.stop = () => { state.stopped = true; stop(); void context.close() }
-      state.fakePluck = midi => { oscillator.frequency.value = 440 * 2 ** ((midi - 69) / 12); gain.gain.cancelScheduledValues(context.currentTime); gain.gain.setValueAtTime(.3, context.currentTime); gain.gain.setValueAtTime(0, context.currentTime + .6) }
+      state.fakePluck = (midi, seconds = .6) => { oscillator.frequency.value = 440 * 2 ** ((midi - 69) / 12); gain.gain.cancelScheduledValues(context.currentTime); gain.gain.setValueAtTime(.3, context.currentTime); gain.gain.setValueAtTime(0, context.currentTime + seconds) }
       return output.stream
     } })
   })
@@ -86,28 +93,41 @@ test('instrument answers verify the actual octave without granting position reca
   await page.getByRole('button', { name: /彈吉他.*麥克風作答/ }).click()
   await page.getByLabel('這次練什麼').selectOption('notes')
   await startPractice(page)
-  await expect(page.locator('.question-prompt')).toContainText('照圖彈奏')
-  expect(await page.evaluate(() => (window as unknown as { micCalls: number }).micCalls)).toBe(0)
-  const prompt = await page.locator('.question-prompt').textContent()
-  const match = /第 (\d) 弦(?:第 (\d+) 格|空弦)/.exec(prompt!)!
-  const midi = [40,45,50,55,59,64][6 - Number(match[1])] + Number(match[2] ?? 0)
-  await page.getByRole('button', { name: '開始收音', exact: true }).click()
+  await expect(page.locator('.question-prompt')).toContainText('並彈出來')
+  await expect(page.locator('.question-prompt')).not.toContainText(/第 \d+ (格|弦)/)
+  await expect(page.locator('.question-card [data-target-string="true"]')).toHaveCount(1)
+  await expect(page.locator('.question-card .svg-note')).toHaveCount(0)
+  await expect.poll(() => page.evaluate(() => (window as unknown as { micCalls: number }).micCalls)).toBe(1)
+  const midi = await requestedMidi(page)
   await expect(page.getByRole('button', { name: '停止收音', exact: true })).toBeVisible()
+  await page.screenshot({ path: info.outputPath('instrument-question.png'), fullPage: true })
+  await page.getByRole('button', { name: '提示位置', exact: true }).click()
+  await expect(page.locator('.question-card .svg-note')).toHaveCount(1)
   // A full octave must fail, even though the note name is the same.
   const wrong = midi + 12 <= 76 ? midi + 12 : midi - 12
   await page.waitForTimeout(250)
-  await page.evaluate(m => (window as unknown as { fakePluck: (midi: number) => void }).fakePluck(m), wrong)
+  await page.evaluate(m => (window as unknown as { fakePluck: (midi: number, seconds?: number) => void }).fakePluck(m), wrong)
   await expect(page.getByRole('status').filter({ hasText: '還不對' })).toBeVisible()
-  expect((await attempts(page))[0]).toMatchObject({ inputMethod: 'microphone', verificationScope: 'exactPitch', itemResults: {}, reviewItemIds: [], result: 'incorrect' })
+  expect((await attempts(page))[0]).toMatchObject({ inputMethod: 'microphone', verificationScope: 'exactPitch', itemResults: {}, reviewItemIds: [], result: 'incorrect', assisted: true })
   expect((await attempts(page))[0].string).toBeUndefined()
   await page.screenshot({ path: info.outputPath('instrument-feedback.png'), fullPage: true })
-  await page.getByRole('button', { name: '再試一次', exact: true }).click()
-  await page.waitForTimeout(900)
-  await page.evaluate(m => (window as unknown as { fakePluck: (midi: number) => void }).fakePluck(m), midi)
+  await expect(page.getByRole('button', { name: '再試一次', exact: true })).toHaveCount(0)
+  await expect(page.getByRole('status').filter({ hasText: '還不對' })).toHaveCount(0)
+  await expect(page.locator('.question-card .svg-note')).toHaveCount(0)
+  await page.waitForTimeout(250)
+  await page.evaluate(m => (window as unknown as { fakePluck: (midi: number, seconds?: number) => void }).fakePluck(m, 5), midi)
   await expect.poll(async () => (await attempts(page)).filter(a => a.result === 'correct').length).toBe(1)
+  await expect(page.getByRole('status').filter({ hasText: '✓ 音高正確' })).toHaveCount(0)
+  await expect(page.locator('.question-card .svg-note')).toHaveCount(0)
+  await page.waitForTimeout(400)
+  expect(await attempts(page)).toHaveLength(2) // A held note must not answer the next question.
   expect(await page.evaluate(() => (window as unknown as { micCalls: number }).micCalls)).toBe(1)
   await page.getByRole('button', { name: '暫停', exact: true }).click()
   await expect.poll(() => page.evaluate(() => (window as unknown as { stopped: boolean }).stopped)).toBe(true)
+  await page.getByRole('button', { name: '繼續練習', exact: true }).click()
+  await expect.poll(() => page.evaluate(() => (window as unknown as { micCalls: number }).micCalls)).toBe(2)
+  await page.getByRole('button', { name: '結束這次', exact: true }).click()
+  await expect(page.locator('.play-listen')).toHaveCount(0)
 })
 
 test('naming stays naming with microphone selected; left-handed arrow direction follows the screen', async ({ page }) => {
@@ -127,6 +147,7 @@ test('quiet built-in-microphone levels produce visible feedback and grade the fi
     state.micCalls = 0
     Object.defineProperty(navigator.mediaDevices, 'getUserMedia', { value: async () => {
       state.micCalls++
+      while (state.targetMidi == null) await new Promise(resolve => setTimeout(resolve, 10))
       const context = new AudioContext(); await context.resume()
       const output = context.createMediaStreamDestination()
       const gain = context.createGain(); gain.gain.value = .008
@@ -141,11 +162,8 @@ test('quiet built-in-microphone levels produce visible feedback and grade the fi
   await page.getByRole('button', { name: /彈吉他.*麥克風作答/ }).click()
   await page.getByLabel('這次練什麼').selectOption('notes')
   await startPractice(page)
-  const prompt = await page.locator('.question-prompt').textContent()
-  const match = /第 (\d) 弦(?:第 (\d+) 格|空弦)/.exec(prompt!)!
-  const midi = [40,45,50,55,59,64][6 - Number(match[1])] + Number(match[2] ?? 0)
+  const midi = await requestedMidi(page)
   await page.evaluate(value => { (window as unknown as { targetMidi: number }).targetMidi = value }, midi)
-  await page.getByRole('button', { name: '開始收音', exact: true }).click()
   await expect.poll(async () => (await attempts(page)).filter(a => a.result === 'correct').length).toBe(1)
   await expect.poll(() => page.getByRole('meter', { name: '麥克風輸入音量' }).evaluate(e => (e as HTMLMeterElement).value)).toBeGreaterThan(0)
   await expect(page.locator('.play-listen strong')).toContainText('聽到')
@@ -161,9 +179,33 @@ test('denied microphone permission is an actionable error rather than a false li
   await page.getByRole('button', { name: /彈吉他.*麥克風作答/ }).click()
   await page.getByLabel('這次練什麼').selectOption('notes')
   await startPractice(page)
-  await page.getByRole('button', { name: '開始收音', exact: true }).click()
   await expect(page.getByText('收音未啟動', { exact: true })).toBeVisible()
   await expect(page.getByText(/網站尚未取得麥克風權限/)).toBeVisible()
   await expect(page.getByRole('button', { name: '重新收音', exact: true })).toBeVisible()
   expect(await attempts(page)).toHaveLength(0)
 })
+
+for (const width of [390, 1280]) {
+  test(`naming and finding share board axes and geometry at ${width}px`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 900 })
+    await page.goto('/lab/fretboard')
+    const board = page.locator('svg.fretboard')
+    const geometry = await board.getAttribute('viewBox')
+    await page.goto('/')
+    await page.getByLabel('這次練什麼').selectOption('notes')
+    await startPractice(page)
+    await expect(page.locator('.question-card .shared-fretboard')).toHaveClass(/is-playing/)
+    await expect(page.locator('.question-card .svg-string-label')).toHaveText(['1','2','3','4','5','6'])
+    await expect(board).toHaveAttribute('viewBox', geometry!)
+    await page.getByRole('button', { name: '結束這次', exact: true }).click()
+    await page.goto('/')
+    await page.getByLabel('這次練什麼').selectOption('naming')
+    await startPractice(page)
+    await expect(page.locator('.pitch-picker')).toBeVisible()
+    await expect(page.locator('.question-card .shared-fretboard')).toHaveClass(/is-playing/)
+    await expect(page.locator('.question-card .svg-string-label')).toHaveText(['1','2','3','4','5','6'])
+    await expect(board).toHaveAttribute('viewBox', geometry!)
+    await expect(board.locator('.svg-note')).toHaveCount(1)
+    await expect(board.locator('.svg-note')).toContainText('?')
+  })
+}

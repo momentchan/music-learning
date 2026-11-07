@@ -228,3 +228,11 @@ it('a note lesson includes both location and active naming without changing cont
     expect(plan.some(i => i.kind === 'question' && ['scale.major', 'key.diatonic', 'fret.octaves'].includes(i.question.nodeId))).toBe(false)
   }
 })
+
+
+it('using a hint does not count as independent recall evidence', () => {
+  const hinted = Array.from({ length: 12 }, (_, i) => ({ ...attempt('fret.open', true, T0 + i * DAY), assisted: true }))
+  const state = computeNodeMastery('fret.open', hinted, new Map(), [], T0 + 13 * DAY)
+  expect(state.samples).toBe(0)
+  expect(state.state).toBe('new')
+})

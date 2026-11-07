@@ -83,7 +83,7 @@ export function NodeScreen({ nodeId }: { nodeId: string }) {
           {error && <p className="notice" role="alert">{error}</p>}
         </>}
     </section>
-    {node.content && <details className="course-preview"><summary>課程預覽</summary><LessonContentView node={node} layout={learning.preferences.practiceLayout}/></details>}
+    {node.content && <details className="course-preview"><summary>課程預覽</summary><LessonContentView node={node}/></details>}
     {node.bridge && <section className="card"><h3>拿起吉他</h3><p>{node.bridge.text}</p></section>}
   </div>
 }
