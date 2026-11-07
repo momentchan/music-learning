@@ -64,8 +64,8 @@ export const useLearning = create<LearningState>((set, get) => ({
 
   startGuided: async audio => {
     const { reviews, mastery, preferences } = get()
-    const plan = buildGuidedSession({ seed: randomSeed(), now: Date.now(), audio, reviews, mastery, preference: preferences.difficulty, focus: preferences.practiceFocus })
-    const session = newSession('guided', plan, { audio, practiceContext: preferences.practiceContext, practiceFocus: preferences.practiceFocus, answerInput: preferences.practiceContext === 'pocket' ? 'tap' : preferences.answerInput })
+    const plan = buildGuidedSession({ seed: randomSeed(), now: Date.now(), audio, reviews, mastery, preference: preferences.difficulty, focus: preferences.practiceFocus, intro: false })
+    const session = newSession('guided', plan, { audio, practiceContext: preferences.practiceContext, practiceFocus: preferences.practiceFocus, answerInput: preferences.practiceContext === 'instrument' ? 'play' : 'tap' })
     await repository.saveSession(session)
     const focusId = plan.find(item => item.kind === 'learn')?.nodeId ?? plan.find(item => item.kind === 'question')?.question.nodeId
     const bridge = focusId ? nodeById(focusId)?.bridge : undefined
@@ -91,7 +91,7 @@ export const useLearning = create<LearningState>((set, get) => ({
   startLesson: async (nodeId, audio) => {
     const { mastery, preferences } = get()
     const plan = buildLesson({ nodeId, seed: randomSeed(), difficulty: adaptiveDifficulty(mastery.get(nodeId), preferences.difficulty), audio })
-    const session = newSession('lesson', plan, { nodeId, audio, practiceContext: preferences.practiceContext, practiceFocus: preferences.practiceFocus, answerInput: preferences.practiceContext === 'pocket' ? 'tap' : preferences.answerInput })
+    const session = newSession('lesson', plan, { nodeId, audio, practiceContext: preferences.practiceContext, practiceFocus: preferences.practiceFocus, answerInput: preferences.practiceContext === 'instrument' ? 'play' : 'tap' })
     await repository.saveSession(session)
     set({ activeSession: session })
     return session.id
@@ -100,7 +100,7 @@ export const useLearning = create<LearningState>((set, get) => ({
   startFree: async (nodeIds, count, audio) => {
     const { mastery, preferences } = get()
     const plan = buildFreePractice({ nodeIds, count, seed: randomSeed(), difficulty: preferences.difficulty, audio, mastery })
-    const session = newSession('free', plan, { nodeId: nodeIds.length === 1 ? nodeIds[0] : undefined, audio, practiceContext: preferences.practiceContext, practiceFocus: preferences.practiceFocus, answerInput: preferences.practiceContext === 'pocket' ? 'tap' : preferences.answerInput })
+    const session = newSession('free', plan, { nodeId: nodeIds.length === 1 ? nodeIds[0] : undefined, audio, practiceContext: preferences.practiceContext, practiceFocus: preferences.practiceFocus, answerInput: preferences.practiceContext === 'instrument' ? 'play' : 'tap' })
     await repository.saveSession(session)
     set({ activeSession: session })
     return session.id

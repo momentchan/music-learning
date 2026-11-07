@@ -5,7 +5,7 @@ import { audioEngine } from '../../audio/AudioEngine'
 import { db, saveAttempt, type AudioAttempt } from '../../data/db'
 import { COMPARISONS, comparisonEvents } from '../../music/comparisons'
 import { makeEarQuestion, type EarQuestion, type EarType } from '../../music/ear'
-import { chooseReviewPosition, fretRegion, positionsForNote, reviewSummary, type ReviewPosition } from '../../music/fretboardQuiz'
+import { positionsForNote } from '../../music/fretboardQuiz'
 import { CHORD_INTERVALS, INTERVALS, SHARPS, STANDARD_TUNING, chordPitchClasses, chordVoicing, midiToFrequency, noteName, parseChord, planProgression, scaleNotes, type ChordStyle, type IntervalMode, type ProgressionChord, type ScaleName } from '../../music/theory'
 import { useAudioSettings } from '../../state/useAudioSettings'
 import { useAudioUi } from '../../stores/audioUi'
@@ -20,10 +20,10 @@ const EXAMPLES: { title: string; chords: string[] }[] = [
   { title: 'Open resolution', chords: ['Cmaj7', 'Em7', 'D'] },
 ]
 const EAR_TYPES: { id: EarType; label: string }[] = [
-  { id: 'interval', label: 'Intervals' }, { id: 'triad', label: 'Major / minor' },
-  { id: 'seventh', label: 'Seventh chords' }, { id: 'degree', label: 'Scale degree' },
-  { id: 'cadence', label: 'Cadences' }, { id: 'bass', label: 'Bass motion' },
-  { id: 'progression', label: 'Progressions' },
+  { id: 'interval', label: '音程' }, { id: 'triad', label: '大小和弦' },
+  { id: 'seventh', label: '七和弦' }, { id: 'degree', label: '級數' },
+  { id: 'cadence', label: '終止式' }, { id: 'bass', label: '低音走向' },
+  { id: 'progression', label: '和弦進行' },
 ]
 
 const MOBILE_FRET_WIRES = [32]
@@ -32,144 +32,91 @@ for (let fret = 1; fret <= 12; fret++) {
 }
 const MOBILE_FRETBOARD_HEIGHT = Math.ceil(MOBILE_FRET_WIRES[12]) + 32
 
-export function Fretboard({ run }: { run: (fn: () => Promise<unknown>) => Promise<void> }) {
+export function Fretboard({ run, purpose = 'reference' }: { run: (fn: () => Promise<unknown>) => Promise<void>; purpose?: 'reference' | 'all-positions' }) {
+  const practice = purpose === 'all-positions'
   const [selected, setSelected] = useState<{ string: number; fret: number; midi: number } | null>(null)
   const [showAll, setShowAll] = useState(false)
-  const [narrow, setNarrow] = useState(() => typeof window !== 'undefined' && window.matchMedia('(max-width: 700px)').matches)
+  const [narrow, setNarrow] = useState(() => window.matchMedia('(max-width: 700px)').matches)
   const boardRef = useRef<HTMLDivElement>(null)
   const [mobileHeight, setMobileHeight] = useState(MOBILE_FRETBOARD_HEIGHT)
   const { preferences, savePreferences } = useLearning()
-  const practiceLayout = preferences.practiceLayout
-  const [mode, setMode] = useState<'explore' | 'one-note' | 'random'>('explore')
-  const [singleNote, setSingleNote] = useState<string>('C')
-  const [randomTarget, setRandomTarget] = useState<ReviewPosition>({ note: 'C', string: 6, fret: 8, midi: 48, reason: 'new' })
-  const [seed, setSeed] = useState(0)
+  const vertical = narrow || (practice && preferences.practiceLayout === 'vertical')
+  const [note, setNote] = useState('C')
   const [found, setFound] = useState<string[]>([])
-  const [roundDone, setRoundDone] = useState(false)
-  const [lastResult, setLastResult] = useState<{ correct: boolean; label: string; repeated?: boolean } | null>(null)
+  const [feedback, setFeedback] = useState('')
+  const [error, setError] = useState('')
   const [quizAttempts, setQuizAttempts] = useState<AudioAttempt[]>([])
-  const [quizError, setQuizError] = useState('')
-  const attemptStartedAt = useRef(Date.now())
-  const [sessionId] = useState(() => crypto.randomUUID())
-  const answerPending = useRef(false)
-  const roundMissed = useRef(false)
-  const [accessibleString, setAccessibleString] = useState(1)
-  const [accessibleFret, setAccessibleFret] = useState(1)
-  const frets = Array.from({ length: 12 }, (_, index) => index + 1)
-  const targetNote = mode === 'one-note' ? singleNote : randomTarget.note
-  const targetCount = positionsForNote(targetNote).length
-  const currentAttempts = quizAttempts.filter(attempt => attempt.topicId === `fretboard.note.${targetNote}` && (mode === 'one-note' || (attempt.targetString ?? attempt.string) === randomTarget.string))
-  const progress = reviewSummary(quizAttempts, Date.now())
-  // Practice reads top-to-bottom like a chord chart: vertical by default on every screen size.
-  const vertical = narrow || (mode !== 'explore' && practiceLayout === 'vertical')
-  // Change the fret spacing, rather than stretching the SVG: circles and text stay round.
-  const boardHeight = narrow ? mobileHeight : MOBILE_FRETBOARD_HEIGHT
+  const pending = useRef(false)
+  const startedAt = useRef(Date.now())
+  const sessionId = useRef(crypto.randomUUID())
+  const [formString, setFormString] = useState(1)
+  const [formFret, setFormFret] = useState(1)
+  const targets = positionsForNote(note)
+  const done = found.length === targets.length
+  useEffect(() => {
+    const query = window.matchMedia('(max-width: 700px)')
+    const changed = () => setNarrow(query.matches)
+    query.addEventListener('change', changed)
+    return () => query.removeEventListener('change', changed)
+  }, [])
   useLayoutEffect(() => {
     if (!narrow || !boardRef.current) return
     const board = boardRef.current
-    const navigation = document.querySelector('.bottom-nav')
     const measure = () => {
       const bounds = board.getBoundingClientRect()
-      if (!bounds.width) return
-      // Document coordinates keep the size stable when the user scrolls to the extra controls.
-      const top = bounds.top + window.scrollY
-      const viewportHeight = window.visualViewport?.height ?? window.innerHeight
-      const bottom = viewportHeight - (navigation?.getBoundingClientRect().height ?? 0) - 8
-      const height = Math.min(MOBILE_FRETBOARD_HEIGHT, Math.max(160, (bottom - top) * 300 / bounds.width))
-      setMobileHeight(previous => Math.abs(previous - height) < 0.5 ? previous : height)
+      const nav = document.querySelector('.bottom-nav')?.getBoundingClientRect().height ?? 0
+      const available = (window.visualViewport?.height ?? window.innerHeight) - nav - 8 - bounds.top - window.scrollY
+      if (bounds.width) setMobileHeight(Math.min(MOBILE_FRETBOARD_HEIGHT, Math.max(160, available * 300 / bounds.width)))
     }
-    const observer = new ResizeObserver(measure)
-    observer.observe(board)
+    const observer = new ResizeObserver(measure); observer.observe(board)
     if (board.previousElementSibling) observer.observe(board.previousElementSibling)
-    if (navigation) observer.observe(navigation)
-    window.addEventListener('resize', measure)
-    window.visualViewport?.addEventListener('resize', measure)
-    measure()
-    return () => {
-      observer.disconnect()
-      window.removeEventListener('resize', measure)
-      window.visualViewport?.removeEventListener('resize', measure)
-    }
+    window.addEventListener('resize', measure); window.visualViewport?.addEventListener('resize', measure); measure()
+    return () => { observer.disconnect(); window.removeEventListener('resize', measure); window.visualViewport?.removeEventListener('resize', measure) }
   }, [narrow])
-  function changePracticeLayout(next: 'vertical' | 'horizontal') { void savePreferences({ practiceLayout: next }) }
-
   useEffect(() => {
-    const query = window.matchMedia('(max-width: 700px)')
-    const updateLayout = () => setNarrow(query.matches)
-    query.addEventListener('change', updateLayout)
-    return () => query.removeEventListener('change', updateLayout)
-  }, [])
-  useEffect(() => {
-    void db.attempts.where('exerciseType').equals('fretboard.find-note').toArray()
-      .then(rows => setQuizAttempts(rows.sort((a, b) => a.timestamp - b.timestamp))).catch(() => setQuizError('Practice records are unavailable on this device.'))
-  }, [])
-  function resetRound() { setFound([]); setRoundDone(false); setLastResult(null); setSelected(null); setShowAll(false); attemptStartedAt.current = Date.now(); roundMissed.current = false }
-  function changeMode(next: 'explore' | 'one-note' | 'random') {
-    setMode(next); setShowAll(false); resetRound()
-    if (next === 'random') {
-      const nextSeed = crypto.getRandomValues(new Uint32Array(1))[0]
-      setSeed(nextSeed); setRandomTarget(chooseReviewPosition(quizAttempts, nextSeed, Date.now()))
-    }
-  }
-  function nextRandomNote() {
-    const nextSeed = crypto.getRandomValues(new Uint32Array(1))[0]
-    setSeed(nextSeed); setRandomTarget(chooseReviewPosition(quizAttempts, nextSeed, Date.now(), randomTarget)); resetRound()
-  }
-  function nextSingleNote() { setSingleNote(SHARPS[(SHARPS.indexOf(singleNote as typeof SHARPS[number]) + 1) % SHARPS.length]); resetRound() }
+    if (!practice) return
+    void db.attempts.where('exerciseType').equals('fretboard.find-note').toArray().then(setQuizAttempts).catch(() => setError('無法讀取紀錄。'))
+  }, [practice])
+  function changeNote(next: string) { setNote(next); setFound([]); setSelected(null); setFeedback(''); setShowAll(false); startedAt.current = Date.now() }
   async function choose(string: number, fret: number) {
-    const midi = STANDARD_TUNING[string] + fret
-    if (mode === 'explore') { setSelected({ string, fret, midi }); await run(() => audioEngine.playNote(midi)); return }
-    if (roundDone || answerPending.current) return
-    const positionKey = `${string}-${fret}`
-    if (mode === 'one-note' && found.includes(positionKey)) { setLastResult({ correct: true, label: 'You already found this position.', repeated: true }); return }
-    answerPending.current = true
-    const actualNote = SHARPS[midi % 12]
-    const targetString = mode === 'random' ? randomTarget.string : 6 - string
-    const targetFret = mode === 'random' ? randomTarget.fret : positionsForNote(targetNote).find(position => position.string === targetString)!.fret
-    const correct = actualNote === targetNote && (mode === 'one-note' || targetString === 6 - string)
-    if (!correct) roundMissed.current = true
-    const assisted = mode === 'random' && correct && roundMissed.current
-    const nextFound = correct && mode === 'one-note' ? [...found, positionKey] : found
-    setSelected({ string, fret, midi })
-    const wrongLabel = mode === 'random'
-      ? `Try string ${targetString}, ${fretRegion(targetFret)}. ${actualNote === targetNote ? `Right note on string ${6 - string}.` : `${noteName(midi)} is ${actualNote}.`}`
-      : `${noteName(midi)} is ${actualNote}. Find ${targetNote}.`
-    setLastResult({ correct, label: correct ? `${noteName(midi)} · string ${6 - string}, fret ${fret}` : wrongLabel })
-    if (correct) { setFound(nextFound); if (mode === 'random' || nextFound.length === targetCount) setRoundDone(true) }
+    const midi = STANDARD_TUNING[6 - string] + fret
+    if (!practice) { setSelected({ string, fret, midi }); void run(() => audioEngine.playNote(midi)); return }
+    if (pending.current || done) return
+    const key = `${string}-${fret}`
+    if (found.includes(key)) { setFeedback('這個位置已找過。'); return }
+    pending.current = true
+    const correct = SHARPS[midi % 12] === note
+    setSelected({ string, fret, midi }); setFeedback(correct ? '正確' : `這裡是 ${noteName(midi)}，請找 ${note}。`)
+    if (correct) setFound(previous => [...previous, key])
     void run(() => audioEngine.playNote(midi))
     try {
-      const timestamp = Date.now()
-      const responseMs = Math.max(0, timestamp - attemptStartedAt.current)
-      attemptStartedAt.current = timestamp
-      const record = await saveAttempt({ id: crypto.randomUUID(), sessionId, exerciseType: 'fretboard.find-note', topicId: `fretboard.note.${targetNote}`,
-        question: { mode, targetNote, targetString, targetFret, seed, frets: [1, 12] }, response: `String ${6 - string}, fret ${fret}, ${noteName(midi)}`, expected: `String ${targetString}, fret ${targetFret}, ${targetNote}`,
-        correct, responseMs, replays: 0, difficulty: 1, timestamp,
-        string: 6 - string, fret, note: targetNote, mode, targetString, targetFret, assisted })
-      setQuizAttempts(previous => [...previous, record])
-    } catch { setQuizError('Answer checked, but it could not be saved. Check browser storage and try again.') }
-    finally { answerPending.current = false }
+      const now = Date.now()
+      const record = await saveAttempt({ id: crypto.randomUUID(), sessionId: sessionId.current, exerciseType: 'fretboard.find-note', topicId: `fretboard.note.${note}`,
+        question: { mode: 'one-note', targetNote: note, frets: [1, 12] }, response: `String ${string}, fret ${fret}, ${noteName(midi)}`, expected: note,
+        correct, responseMs: Math.max(0, now - startedAt.current), replays: 0, difficulty: 1, timestamp: now, string, fret, note, mode: 'one-note', targetString: string,
+        targetFret: targets.find(p => p.string === string)!.fret, assisted: false })
+      setQuizAttempts(previous => [...previous, record]); startedAt.current = now
+    } catch { setError('答案已判斷，但尚未保存。') } finally { pending.current = false }
   }
-  const boardMarks: FretMark[] = found.map(key => { const [index, fret] = key.split('-').map(Number); return { string: 6 - index, fret, label: targetNote, tone: 'correct' as const } })
-  if (selected) boardMarks.push({ string: 6 - selected.string, fret: selected.fret, label: noteName(selected.midi).replace(/\d/, ''), tone: lastResult?.correct === false ? 'wrong' : 'selected' })
-  return <><section className="intro-card"><div><p className="eyebrow">01 / INTERACTIVE INSTRUMENT</p><h2>Hear every position.</h2><p>Explore the neck or practice finding notes on frets 1–12.</p></div><div className="pulse-icon">♪</div></section>
-    <section className={`card fretboard-card${mode === 'explore' ? '' : ' practice'}`}><div className="fretboard-controls"><div className="section-head"><div><h3>SVG fretboard</h3><p>Standard tuning · frets 1–12</p></div><button className="subtle-button" disabled={mode !== 'explore' && !roundDone} onClick={() => setShowAll(!showAll)}>{showAll ? 'Hide labels' : 'Show labels'}</button></div>
-      <div className="fretboard-modes" role="group" aria-label="Fretboard mode"><button className={mode === 'explore' ? 'active' : ''} onClick={() => changeMode('explore')}>Explore</button><button className={mode === 'one-note' ? 'active' : ''} onClick={() => changeMode('one-note')}>One note</button><button className={mode === 'random' ? 'active' : ''} onClick={() => changeMode('random')}>Random review</button></div>
-      {mode !== 'explore' && <div className="fretboard-quiz"><div><span className="eyebrow">FIND THE NOTE</span><strong>{targetNote}<em>{mode === 'one-note' ? `${found.length} / ${targetCount} found` : `string ${randomTarget.string}`}</em></strong><small role="status" title={lastResult?.label}>{lastResult ? `${lastResult.label}${roundDone && !lastResult.repeated ? mode === 'one-note' ? ' All positions found!' : ' Nice work!' : ''}` : mode === 'one-note' ? 'Find it on every string' : `${{ new: 'New position', missed: 'Missed position', due: 'Due for review', practice: 'Extra practice' }[randomTarget.reason]} · ${progress.seen}/72 seen`}</small></div>{mode === 'one-note' ? <><label>Practice note<select aria-label="Practice note" value={singleNote} onChange={e => { setSingleNote(e.target.value); resetRound() }}>{SHARPS.map(note => <option key={note}>{note}</option>)}</select></label>{roundDone && <button className="secondary-button" onClick={nextSingleNote}>Next note →</button>}</> : <button className="secondary-button" onClick={nextRandomNote}>{roundDone ? 'Next →' : 'Skip →'}</button>}</div>}
-      {mode !== 'explore' && <p className="quiz-guidance">{mode === 'one-note' ? 'Find this note on every string. Green positions are already found.' : `Review by note and string: ${progress.missed} missed, ${progress.due} due. Misses and overdue positions return more often; skipping has no penalty.`} Local record for {targetNote}{mode === 'random' ? ` on string ${randomTarget.string}` : ''}: {currentAttempts.filter(attempt => attempt.correct).length} correct, {currentAttempts.filter(attempt => !attempt.correct).length} missed.</p>}
-      {mode !== 'explore' && !narrow && <div className="fretboard-modes layout-toggle" role="group" aria-label="Practice layout"><button className={practiceLayout === 'vertical' ? 'active' : ''} aria-pressed={practiceLayout === 'vertical'} onClick={() => changePracticeLayout('vertical')}>直式 Vertical</button><button className={practiceLayout === 'horizontal' ? 'active' : ''} aria-pressed={practiceLayout === 'horizontal'} onClick={() => changePracticeLayout('horizontal')}>橫式 Horizontal</button></div>}
-      {quizError && <div className="notice" role="alert">{quizError}</div>}
-      </div>
-      <div ref={boardRef} className="fretboard-scroll" role="region" aria-label={vertical ? 'Fretboard frets 1 to 12' : 'Scroll horizontally through frets 1 to 12'} tabIndex={0}>
-        <SharedFretboard tuning={STANDARD_TUNING} minFret={1} maxFret={12} orientation={vertical ? 'vertical' : 'horizontal'} leftHanded={preferences.leftHanded} fitHeight={vertical ? boardHeight * 340 / 300 : undefined}
-          marks={boardMarks} showNoteNames={showAll} onSelect={(string, fret) => void choose(6 - string, fret)}
-          label={vertical ? 'Vertical six-string guitar fretboard, frets 1 to 12' : 'Six-string guitar fretboard, frets 1 to 12'}
-          cellLabel={(string, fret) => `String ${string}, fret ${fret}${mode === 'explore' || roundDone ? `, ${noteName(STANDARD_TUNING[6 - string] + fret)}` : ''}`}/>
-
-      </div>
-      <p className="fretboard-hint">All frets from 1 to 12 are on this board.</p>
-      <details className="position-controls"><summary>Choose a position with form controls</summary><div className="field-row"><label>String<select value={accessibleString} onChange={e => setAccessibleString(Number(e.target.value))}>{[1, 2, 3, 4, 5, 6].map(n => <option key={n} value={n}>String {n}</option>)}</select></label><label>Fret<select value={accessibleFret} onChange={e => setAccessibleFret(Number(e.target.value))}>{frets.map(n => <option key={n} value={n}>Fret {n}</option>)}</select></label></div><button className="secondary-button" onClick={() => void choose(6 - accessibleString, accessibleFret)}>{mode === 'explore' ? `Select and play ${noteName(STANDARD_TUNING[6 - accessibleString] + accessibleFret)}` : 'Submit position'}</button></details>
-      <div className="selected-note"><div><span className="eyebrow">SELECTED POSITION</span><strong>{selected ? noteName(selected.midi) : 'Tap a note'}</strong><small>{selected ? `String ${6 - selected.string} · fret ${selected.fret} · ${Math.round(midiToFrequency(selected.midi))} Hz` : 'The note and octave appear here'}</small></div>{selected && <button className="primary-button compact" onClick={() => void run(() => audioEngine.playNote(selected.midi))}>▶ Replay</button>}</div>
-    </section></>
+  const marks: FretMark[] = found.map(key => { const [string, fret] = key.split('-').map(Number); return { string, fret, label: note, tone: 'correct' } })
+  if (selected) marks.push({ ...selected, label: noteName(selected.midi).replace(/\d/, ''), tone: practice && SHARPS[selected.midi % 12] !== note ? 'wrong' : 'selected' })
+  const history = quizAttempts.filter(a => a.topicId === `fretboard.note.${note}`)
+  return <section className={`card fretboard-card${practice ? ' practice' : ''}`}>
+    <div className="fretboard-controls">
+      <div className="section-head"><h3>{practice ? '找出同音的所有位置' : '指板查詢'}</h3><button className="subtle-button" disabled={practice && !done} onClick={() => setShowAll(!showAll)}>{showAll ? '隱藏音名' : '顯示音名'}</button></div>
+      {practice && <div className="fretboard-quiz"><div><strong>{note}<em>{found.length} / {targets.length}</em></strong><small role="status">{feedback || '在每條弦找出這個音'}</small></div><label>練習音名<select value={note} onChange={e => changeNote(e.target.value)}>{SHARPS.map(n => <option key={n}>{n}</option>)}</select></label>{done && <button className="secondary-button" onClick={() => changeNote(SHARPS[(SHARPS.indexOf(note as typeof SHARPS[number]) + 1) % 12])}>下一個音 →</button>}</div>}
+      {practice && !narrow && <div className="fretboard-modes" role="group" aria-label="指板視角"><button aria-pressed={preferences.practiceLayout === 'vertical'} onClick={() => void savePreferences({ practiceLayout: 'vertical' })}>教材直式</button><button aria-pressed={preferences.practiceLayout === 'horizontal'} onClick={() => void savePreferences({ practiceLayout: 'horizontal' })}>TAB 橫式</button></div>}
+      {error && <p role="alert">{error}</p>}
+    </div>
+    <div ref={boardRef} className="fretboard-scroll" role="region" aria-label="完整指板">
+      <SharedFretboard tuning={STANDARD_TUNING} minFret={1} maxFret={12} orientation={vertical ? 'vertical' : practice ? 'horizontal' : 'playing'} leftHanded={preferences.leftHanded} fitHeight={vertical ? (narrow ? mobileHeight : MOBILE_FRETBOARD_HEIGHT) * 340 / 300 : undefined}
+        marks={marks} showNoteNames={showAll} onSelect={(string, fret) => void choose(string, fret)} label="六弦吉他指板，第 1–12 格"
+        cellLabel={(string, fret) => `String ${string}, fret ${fret}${!practice || done ? `, ${noteName(STANDARD_TUNING[6 - string] + fret)}` : ''}`}/>
+    </div>
+    <div className="selected-note"><div><strong>{selected ? noteName(selected.midi) : '點選位置'}</strong><small>{selected ? `第 ${selected.string} 弦 · 第 ${selected.fret} 格` : ''}</small></div>{selected && <button className="secondary-button" onClick={() => void run(() => audioEngine.playNote(selected.midi))}>重播</button>}</div>
+    <details className="position-controls"><summary>用選單選取位置</summary><div className="field-row"><label>弦<select value={formString} onChange={e => setFormString(Number(e.target.value))}>{[1,2,3,4,5,6].map(n => <option key={n}>{n}</option>)}</select></label><label>格<select value={formFret} onChange={e => setFormFret(Number(e.target.value))}>{Array.from({ length: 12 }, (_, i) => <option key={i}>{i + 1}</option>)}</select></label></div><button className="secondary-button" onClick={() => void choose(formString, formFret)}>{practice ? '送出位置' : '查看與試聽'}</button></details>
+    {practice && <p className="helper">{history.filter(a => a.correct).length} 次正確 · {history.filter(a => !a.correct).length} 次待加強</p>}
+  </section>
 }
 
 export function Explore({ run, stop }: { run: (fn: () => Promise<unknown>) => Promise<void>; stop: () => void }) {
@@ -183,13 +130,13 @@ export function Explore({ run, stop }: { run: (fn: () => Promise<unknown>) => Pr
   const symbol = root + quality
   const chord = parseChord(symbol)
   const voicing = chordVoicing(symbol, inversion)
-  return <><section className="intro-card"><div><p className="eyebrow">02 / SOUND EXPLORER</p><h2>Build it. Then hear it.</h2><p>Compare intervals, chord qualities, inversions and scales in one place.</p></div><div className="pulse-icon">♫</div></section>
-    <section className="card"><div className="section-head"><div><h3>Chord player</h3><p>Block or arpeggiated · inversion aware</p></div></div><div className="field-row"><label>Root<select value={root} onChange={e => setRoot(e.target.value)}>{SHARPS.map(n => <option key={n}>{n}</option>)}</select></label><label>Quality<select value={quality} onChange={e => { setQuality(e.target.value); setInversion(0) }}>{Object.keys(CHORD_INTERVALS).map(q => <option key={q} value={q}>{q === 'major' ? 'Major' : q === 'minor' ? 'Minor' : q}</option>)}</select></label></div>
-      <div className="field-row"><label>Style<select value={style} onChange={e => setStyle(e.target.value as ChordStyle)}><option value="block">Block chord</option><option value="up">Ascending arpeggio</option><option value="down">Descending arpeggio</option></select></label><label>Inversion<select value={inversion} onChange={e => setInversion(Number(e.target.value))}>{chordPitchClasses(chord).map((_, i) => <option key={i} value={i}>{i === 0 ? 'Root position' : `${i}${i === 1 ? 'st' : i === 2 ? 'nd' : 'rd'} inversion`}</option>)}</select></label></div>
-      <div className="note-chips">{voicing.map((midi, i) => <span key={i}>{noteName(midi)}</span>)}</div><div className="button-row"><button className="primary-button" onClick={() => void run(() => audioEngine.playChord(symbol, style, inversion))}>▶ Play {symbol}</button><button className="secondary-button" onClick={stop}>■ Stop</button></div>
+  return <>
+    <section className="card"><div className="section-head"><div><h3>和弦試聽</h3></div></div><div className="field-row"><label>根音<select value={root} onChange={e => setRoot(e.target.value)}>{SHARPS.map(n => <option key={n}>{n}</option>)}</select></label><label>和弦種類<select value={quality} onChange={e => { setQuality(e.target.value); setInversion(0) }}>{Object.keys(CHORD_INTERVALS).map(q => <option key={q} value={q}>{q === 'major' ? 'Major' : q === 'minor' ? 'Minor' : q}</option>)}</select></label></div>
+      <div className="field-row"><label>彈奏方式<select value={style} onChange={e => setStyle(e.target.value as ChordStyle)}><option value="block">同時彈奏</option><option value="up">由低到高分解</option><option value="down">由高到低分解</option></select></label><label>轉位<select value={inversion} onChange={e => setInversion(Number(e.target.value))}>{chordPitchClasses(chord).map((_, i) => <option key={i} value={i}>{i === 0 ? '原位' : `${i}${i === 1 ? 'st' : i === 2 ? 'nd' : 'rd'} inversion`}</option>)}</select></label></div>
+      <div className="note-chips">{voicing.map((midi, i) => <span key={i}>{noteName(midi)}</span>)}</div><div className="button-row"><button className="primary-button" onClick={() => void run(() => audioEngine.playChord(symbol, style, inversion))}>▶ 播放 {symbol}</button><button className="secondary-button" onClick={stop}>■ 停止</button></div>
     </section>
-    <section className="card"><div className="section-head"><div><h3>Interval player</h3><p>Melodic or harmonic · tap to replay</p></div></div><div className="field-row"><label>Interval<select value={interval} onChange={e => setInterval(Number(e.target.value))}>{INTERVALS.map(i => <option key={i.name} value={i.semitones}>{i.name} · {i.semitones} semitones</option>)}</select></label><label>Playback<select value={mode} onChange={e => setMode(e.target.value as IntervalMode)}><option value="ascending">Ascending</option><option value="descending">Descending</option><option value="harmonic">Together</option></select></label></div><div className="button-row"><button className="primary-button" onClick={() => void run(() => audioEngine.playInterval(60, interval, mode))}>▶ Play interval</button><button className="secondary-button" onClick={() => void run(() => audioEngine.playNote(60))}>Reference C4</button></div></section>
-    <section className="card"><div className="section-head"><div><h3>Scale player</h3><p>Hear each degree in order</p></div></div><label>Scale<select value={scale} onChange={e => setScale(e.target.value as ScaleName)}><option value="major">Major</option><option value="minor">Natural minor</option><option value="pentatonic">Major pentatonic</option><option value="minorPentatonic">Minor pentatonic</option><option value="blues">Blues</option></select></label><div className="note-chips">{scaleNotes(60 + SHARPS.findIndex(n => n === root), scale).map((midi, i) => <span key={i}>{noteName(midi)}</span>)}</div><button className="primary-button" onClick={() => void run(() => audioEngine.playScale(60 + SHARPS.findIndex(n => n === root), scale))}>▶ Play scale</button></section>
+    <section className="card"><div className="section-head"><div><h3>音程試聽</h3></div></div><div className="field-row"><label>音程<select value={interval} onChange={e => setInterval(Number(e.target.value))}>{INTERVALS.map(i => <option key={i.name} value={i.semitones}>{i.name} · {i.semitones} 半音</option>)}</select></label><label>播放方式<select value={mode} onChange={e => setMode(e.target.value as IntervalMode)}><option value="ascending">上行</option><option value="descending">下行</option><option value="harmonic">同時</option></select></label></div><div className="button-row"><button className="primary-button" onClick={() => void run(() => audioEngine.playInterval(60, interval, mode))}>▶ 播放音程</button><button className="secondary-button" onClick={() => void run(() => audioEngine.playNote(60))}>基準音 C4</button></div></section>
+    <section className="card"><div className="section-head"><div><h3>音階試聽</h3></div></div><label>音階<select value={scale} onChange={e => setScale(e.target.value as ScaleName)}><option value="major">大調</option><option value="minor">自然小調</option><option value="pentatonic">大調五聲</option><option value="minorPentatonic">小調五聲</option><option value="blues">藍調</option></select></label><div className="note-chips">{scaleNotes(60 + SHARPS.findIndex(n => n === root), scale).map((midi, i) => <span key={i}>{noteName(midi)}</span>)}</div><button className="primary-button" onClick={() => void run(() => audioEngine.playScale(60 + SHARPS.findIndex(n => n === root), scale))}>▶ 播放音階</button></section>
   </>
 }
 
@@ -205,13 +152,13 @@ export function Progressions({ run, stop, playing, setPlaying }: { run: (fn: () 
   function choose(i: number) { stop(); setActive(-1); setSelected(i); setChords(EXAMPLES[i].chords.map(symbol => ({ symbol, beats: 4 }))) }
   function play() { void run(() => audioEngine.playProgression(chords, { bpm: options.tempo, timeSignature, loop, metronome: options.metronome, onChord: setActive, onStop: () => { setActive(-1); setPlaying(false) } })) }
   function addChord() { try { parseChord(edit); setChords([...chords, { symbol: edit.trim(), beats: timeSignature }]); setEdit('') } catch { /* invalid chord remains editable */ } }
-  return <><section className="intro-card"><div><p className="eyebrow">03 / HARMONY IN MOTION</p><h2>Follow the changes.</h2><p>Tone.Transport schedules each chord and keeps the visual highlight in sync.</p></div><div className="pulse-icon">▥</div></section>
-    <section className="card"><div className="section-head"><div><h3>Progression sequencer</h3><p>Choose a study pattern or edit your own</p></div></div><div className="example-grid">{EXAMPLES.map((ex, i) => <button key={ex.title} className={selected === i ? 'active' : ''} onClick={() => choose(i)}><strong>{ex.title}</strong><small>{ex.chords.join(' → ')}</small></button>)}</div>
+  return <>
+    <section className="card"><div className="section-head"><div><h3>和弦進行</h3></div></div><div className="example-grid">{EXAMPLES.map((ex, i) => <button key={ex.title} className={selected === i ? 'active' : ''} onClick={() => choose(i)}><strong>{ex.title}</strong><small>{ex.chords.join(' → ')}</small></button>)}</div>
       <div className="chord-track">{chords.map((chord, i) => <div key={`${i}-${chord.symbol}`} className={`track-chord ${active === i ? 'playing' : ''}`}><span>{i + 1 < 10 ? `0${i + 1}` : i + 1}</span><strong>{chord.symbol}</strong><select aria-label={`${chord.symbol} duration in beats`} value={chord.beats} onChange={e => setChords(chords.map((c, j) => j === i ? { ...c, beats: Number(e.target.value) } : c))}>{[1, 2, 3, 4, 6, 8].map(n => <option key={n} value={n}>{n} beats</option>)}</select><div><button aria-label={`Play ${chord.symbol}`} onClick={() => void run(() => audioEngine.playChord(chord.symbol))}>▶</button><button aria-label={`Remove ${chord.symbol}`} onClick={() => setChords(chords.filter((_, j) => j !== i))}>×</button></div></div>)}</div>
-      <div className="field-row"><label>Tempo · {options.tempo} BPM<input type="range" min="50" max="180" value={options.tempo} onChange={e => void update({ tempo: Number(e.target.value) })}/></label><label>Time signature<select value={timeSignature} onChange={e => setTimeSignature(Number(e.target.value))}><option value={3}>3/4</option><option value={4}>4/4</option><option value={6}>6/4</option></select></label></div><div className="toggle-row"><label><input type="checkbox" checked={loop} onChange={e => setLoop(e.target.checked)}/> Loop</label><label><input type="checkbox" checked={options.metronome} onChange={e => void update({ metronome: e.target.checked })}/> Metronome</label></div>
-      <div className="button-row"><button className="primary-button" disabled={!chords.length} onClick={play}>{playing ? '↻ Restart' : '▶ Play progression'}</button><button className="secondary-button" onClick={() => { stop(); setActive(-1) }}>■ Stop</button></div>
-      <div className="add-row"><input aria-label="Chord symbol" placeholder="Add chord, e.g. Am7 or G/B" value={edit} onChange={e => setEdit(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') addChord() }}/><button onClick={addChord}>+ Add</button></div><p className="helper">Chord durations are in beats. Common symbols include C, Cm, Cmaj7, C7, Dm7, G/B and Fm.</p>
-      <div className="voice-note"><span>VOICE LEADING</span><p>{plan.map(p => `${p.chord.symbol}: ${p.notes.map(n => noteName(n)).join(' ')}`).join('   ·   ')}</p></div>
+      <div className="field-row"><label>速度 · {options.tempo} BPM<input type="range" min="50" max="180" value={options.tempo} onChange={e => void update({ tempo: Number(e.target.value) })}/></label><label>拍號<select value={timeSignature} onChange={e => setTimeSignature(Number(e.target.value))}><option value={3}>3/4</option><option value={4}>4/4</option><option value={6}>6/4</option></select></label></div><div className="toggle-row"><label><input type="checkbox" checked={loop} onChange={e => setLoop(e.target.checked)}/> 循環</label><label><input type="checkbox" checked={options.metronome} onChange={e => void update({ metronome: e.target.checked })}/> 節拍器</label></div>
+      <div className="button-row"><button className="primary-button" disabled={!chords.length} onClick={play}>{playing ? '↻ 重新播放' : '▶ 播放進行'}</button><button className="secondary-button" onClick={() => { stop(); setActive(-1) }}>■ 停止</button></div>
+      <div className="add-row"><input aria-label="Chord symbol" placeholder="加入和弦，例如 Am7" value={edit} onChange={e => setEdit(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') addChord() }}/><button onClick={addChord}>+ 加入</button></div>
+      <div className="voice-note"><span>聲部配置</span><p>{plan.map(p => `${p.chord.symbol}: ${p.notes.map(n => noteName(n)).join(' ')}`).join('   ·   ')}</p></div>
     </section></>
 }
 
@@ -222,9 +169,9 @@ export function Compare({ run, stop }: { run: (fn: () => Promise<unknown>) => Pr
   const item = COMPARISONS[index]
   function select(i: number) { stop(); setIndex(i); setHeard({ a: false, b: false }) }
   function play(side: 'a' | 'b') { setLast(side); setHeard(v => ({ ...v, [side]: true })); void run(() => audioEngine.playSequence(comparisonEvents(item, side))) }
-  return <><section className="intro-card"><div><p className="eyebrow">04 / CRITICAL LISTENING</p><h2>Hear the difference.</h2><p>Matched register, duration and level help you focus on what changes musically.</p></div><div className="pulse-icon">⇄</div></section>
-    <section className="card"><label>Comparison<select value={index} onChange={e => select(Number(e.target.value))}>{COMPARISONS.map((c, i) => <option key={c.id} value={i}>{c.category} · {c.title}</option>)}</select></label><div className="ab-grid"><div><span className="eyebrow">VERSION A</span><h3>{item.a.join(' → ')}</h3><button className="primary-button" aria-label="Play A" onClick={() => play('a')}>▶ Play A</button></div><div><span className="eyebrow">VERSION B</span><h3>{item.b.join(' → ')}</h3><button className="primary-button" aria-label="Play B" onClick={() => play('b')}>▶ Play B</button></div></div><div className="button-row"><button className="secondary-button" aria-label={`Replay ${last.toUpperCase()}`} onClick={() => play(last)}>↻ Replay {last.toUpperCase()}</button><button className="secondary-button" onClick={stop}>■ Stop</button></div>
-      {heard.a && heard.b ? <div className="explanation"><span>WHAT CHANGED</span><strong>{item.difference}</strong><p>{item.explanation}</p></div> : <p className="helper">Play both versions to reveal the listening guide.</p>}
+  return <>
+    <section className="card"><label>比較項目<select value={index} onChange={e => select(Number(e.target.value))}>{COMPARISONS.map((c, i) => <option key={c.id} value={i}>{c.category} · {c.title}</option>)}</select></label><div className="ab-grid"><div><span className="eyebrow">A</span><h3>{item.a.join(' → ')}</h3><button className="primary-button" aria-label="播放 A" onClick={() => play('a')}>▶ 播放 A</button></div><div><span className="eyebrow">B</span><h3>{item.b.join(' → ')}</h3><button className="primary-button" aria-label="播放 B" onClick={() => play('b')}>▶ 播放 B</button></div></div><div className="button-row"><button className="secondary-button" aria-label={`重播 ${last.toUpperCase()}`} onClick={() => play(last)}>↻ 重播 {last.toUpperCase()}</button><button className="secondary-button" onClick={stop}>■ 停止</button></div>
+      {heard.a && heard.b ? <div className="explanation"><span>差異</span><strong>{item.difference}</strong><p>{item.explanation}</p></div> : <p className="helper">先聽 A 與 B。</p>}
     </section></>
 }
 
@@ -256,23 +203,23 @@ export function EarTraining({ run, stop }: { run: (fn: () => Promise<unknown>) =
       setMastery(record.masteryAfter ?? null)
     } catch { setSaveError('Answer checked, but could not be saved. Check browser storage and try again.') }
   }
-  return <><section className="intro-card"><div><p className="eyebrow">05 / EAR TRAINING</p><h2>Listen before you look.</h2><p>Audio questions hide the answer until you submit. Replaying never counts against you.</p></div><div className="pulse-icon">◉</div></section>
-    <section className="card"><div className="type-pills">{EAR_TYPES.map(t => <button key={t.id} className={type === t.id ? 'active' : ''} onClick={() => next(t.id)}>{t.label}</button>)}</div><div className="question-box"><span className="eyebrow">LISTENING QUESTION</span><h3>{question.prompt}</h3><p>Listen as often as you need, then choose an answer.</p><div className="button-row"><button className="primary-button" onClick={play}>{started ? '↻ Replay audio' : '▶ Play question'}</button>{question.reference && <button className="secondary-button" onClick={() => void run(() => audioEngine.playSequence(question.reference!))}>Reference tonic</button>}</div><small>Replays: {replays}</small></div>
-      {(options.silent || !options.enabled) && <p className="helper">Turn sound on to answer listening questions. Fretboard and theory exploration remain available in silent mode.</p>}
+  return <>
+    <section className="card"><div className="type-pills">{EAR_TYPES.map(t => <button key={t.id} className={type === t.id ? 'active' : ''} onClick={() => next(t.id)}>{t.label}</button>)}</div><div className="question-box"><h3>{question.prompt}</h3><div className="button-row"><button className="primary-button" onClick={play}>{started ? '↻ 重聽' : '▶ 播放題目'}</button>{question.reference && <button className="secondary-button" onClick={() => void run(() => audioEngine.playSequence(question.reference!))}>主音參考</button>}</div></div>
+      {(options.silent || !options.enabled) && <p className="helper">請先開啟聲音。</p>}
       <div className="choice-grid">{question.choices.map(choice => <button key={choice} disabled={answer !== null || options.silent || !options.enabled || !started} className={answer !== null ? choice === question.answer ? 'correct' : choice === answer ? 'wrong' : '' : ''} onClick={() => void submit(choice)}>{choice}</button>)}</div>
-      {answer !== null && <div className={`feedback ${answer === question.answer ? 'success' : ''}`} role="status"><strong>{answer === question.answer ? 'Correct — well heard.' : `Not quite. The answer is ${question.answer}.`}</strong><p>{question.explanation}</p><p>{question.reveal}</p><span>Listen for: {question.focusNotes}</span>{mastery !== null && <small>Recent topic accuracy: {mastery}%</small>}<button className="primary-button" onClick={() => next()}>Next question →</button></div>}
+      {answer !== null && <div className={`feedback ${answer === question.answer ? 'success' : ''}`} role="status"><strong>{answer === question.answer ? '正確' : `答案是 ${question.answer}。`}</strong><p>{question.explanation}</p><p>{question.reveal}</p><span>留意：{question.focusNotes}</span>{mastery !== null && <small>Recent topic accuracy: {mastery}%</small>}<button className="primary-button" onClick={() => next()}>下一題 →</button></div>}
       {saveError && <div className="notice" role="alert">{saveError}</div>}
     </section>
-    <section className="card"><div className="section-head"><div><h3>Recent practice</h3><p>Stored locally in this browser</p></div></div>{history.length ? <div className="history">{history.map(a => <div key={a.id}><span>{a.correct ? '✓' : '·'}</span><strong>{a.topicId.replace('ear.', '')}</strong><small>{a.correct ? 'Correct' : `Review ${a.expected}`} · {a.replays} replays</small></div>)}</div> : <p className="helper">Your answered questions will appear here.</p>}</section>
+
   </>
 }
 
 export function AudioSettingsPanel() {
   const { options, update } = useAudioSettings()
   const { run, loading } = useAudioUi()
-  return <><section className="card settings-card"><h3>聲音 Audio</h3><div className="setting"><div><strong>Audio enabled</strong><p>Allow sound during practice</p></div><input type="checkbox" checked={options.enabled} onChange={e => void update({ enabled: e.target.checked })} aria-label="Audio enabled"/></div><div className="setting"><div><strong>Silent mode</strong><p>Practice without sound while commuting</p></div><input type="checkbox" checked={options.silent} onChange={e => void update({ silent: e.target.checked })} aria-label="Silent mode"/></div>
-      <label>樂器音色<select value={options.instrument} onChange={e => void update({ instrument: e.target.value as 'pluck' | 'keys' })}><option value="pluck">木吉他 · 真實錄音</option><option value="keys">鋼琴 · 真實錄音</option></select></label><p className="helper">首次播放會載入所選樂器的錄音音色。完成網站的離線快取後，也能離線播放。<a href="/audio/ATTRIBUTION.md" target="_blank" rel="noreferrer">取樣來源與授權</a></p>
+  return <><section className="card settings-card"><h3>聲音</h3><div className="setting"><strong>播放聲音</strong><input type="checkbox" checked={options.enabled && !options.silent} onChange={e => void update({ enabled: e.target.checked, silent: !e.target.checked })} aria-label="播放聲音"/></div>
+      <label>樂器音色<select value={options.instrument} onChange={e => void update({ instrument: e.target.value as 'pluck' | 'keys' })}><option value="pluck">木吉他 · 真實錄音</option><option value="keys">鋼琴 · 真實錄音</option></select></label><p className="helper"><a href="/audio/ATTRIBUTION.md" target="_blank" rel="noreferrer">取樣來源與授權</a></p>
       <label>Master volume · {Math.round(options.volume * 100)}%<input type="range" min="0" max="1" step="0.01" value={options.volume} onChange={e => void update({ volume: Number(e.target.value) })}/></label><label>Playback tempo · {options.tempo} BPM<input type="range" min="50" max="180" value={options.tempo} onChange={e => void update({ tempo: Number(e.target.value) })}/></label><label>Note duration · {options.noteDuration.toFixed(2)} s<input type="range" min="0.15" max="1.2" step="0.05" value={options.noteDuration} onChange={e => void update({ noteDuration: Number(e.target.value) })}/></label><div className="setting"><div><strong>Metronome</strong><p>Click during progression playback</p></div><input type="checkbox" checked={options.metronome} onChange={e => void update({ metronome: e.target.checked })} aria-label="Metronome"/></div>
-      <button className="secondary-button" disabled={loading || options.silent || !options.enabled} onClick={() => void run(() => audioEngine.playChord('C', 'up'))}>{loading ? '正在載入音色…' : '試聽音色'}</button><p className="helper">Mobile browsers require a tap before sound starts. Playback pauses when the app is backgrounded; tap again after an interruption.</p>
+      <button className="secondary-button" disabled={loading || options.silent || !options.enabled} onClick={() => void run(() => audioEngine.playChord('C', 'up'))}>{loading ? '正在載入音色…' : '試聽音色'}</button>
     </section></>
 }

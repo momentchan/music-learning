@@ -24,6 +24,8 @@ export type Route =
   | { name: 'session'; sessionId: string }
   | { name: 'lab'; tool: string }
   | { name: 'guitar' }
+  | { name: 'ear-practice' }
+  | { name: 'positions-practice' }
   | { name: 'progress' }
   | { name: 'settings' }
   | { name: 'not-found'; path: string }
@@ -34,7 +36,8 @@ export function parseRoute(path: string): Route {
   switch (parts[0]) {
     case 'learn': return parts[1] ? { name: 'node', nodeId: parts[1] } : { name: 'learn' }
     case 'session': return parts[1] ? { name: 'session', sessionId: parts[1] } : { name: 'today' }
-    case 'lab': return { name: 'lab', tool: parts[1] ?? 'fretboard' }
+    case 'practice': return parts[1] === 'ear' ? { name: 'ear-practice' } : parts[1] === 'positions' ? { name: 'positions-practice' } : { name: 'today' }
+    case 'lab': if (parts[1] === 'ear') return { name: 'ear-practice' }; return { name: 'lab', tool: parts[1] ?? 'fretboard' }
     case 'guitar': return { name: 'guitar' }
     case 'progress': return { name: 'progress' }
     case 'settings': return { name: 'settings' }

@@ -1,6 +1,4 @@
-import { PracticeContextSetting } from '../components/PracticeContextSetting'
 import { useEffect, useRef, useState } from 'react'
-import { AnswerInputSetting } from '../components/AnswerInputSetting'
 import { Calibration } from '../components/rhythm/RhythmPad'
 import { parseBackupText, type BackupEnvelope } from '../database/backup'
 import { repository } from '../database/repository'
@@ -96,8 +94,6 @@ export function SettingsScreen() {
         <option value="auto">自動（依你的正確率調整）</option><option value="1">1 · 入門</option><option value="2">2 · 進階</option><option value="3">3 · 挑戰</option></select></label>
       <label>練習時的指板方向<select value={preferences.practiceLayout} onChange={e => set({ practiceLayout: e.target.value as 'vertical' | 'horizontal' })}>
         <option value="vertical">直式（低音 E 弦在左，像和弦圖）</option><option value="horizontal">橫式（高音 e 弦在上，像六線譜）</option></select></label>
-      <PracticeContextSetting/>
-      <AnswerInputSetting/>
       <label>作答後前進<select value={preferences.advancePolicy} onChange={e => set({ advancePolicy: e.target.value as 'auto' | 'manual' })}><option value="auto">正確時自動，錯誤時停下</option><option value="manual">每題手動前進</option></select></label>
       <div className="setting"><div><strong>左手琴</strong><p>把指板左右鏡像</p></div><input type="checkbox" checked={preferences.leftHanded} onChange={e => set({ leftHanded: e.target.checked })} aria-label="左手琴顯示"/></div>
       <p className="helper">語言：繁體中文（之後會加入 English、日本語）。調音：標準調音（其他調音規劃中）。</p>

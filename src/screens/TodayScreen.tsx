@@ -1,83 +1,47 @@
-import { useMemo, useState } from 'react'
+import { InstrumentTools } from '../components/InstrumentTools'
+import { useEffect, useMemo, useState } from 'react'
 import { navigate } from '../app/router'
-import { NODES, nodeById } from '../curriculum/nodes'
-import { itemLabel } from '../learning/labels'
-import { practiceDaysThisWeek, recommendations, weakItems } from '../learning/mastery'
+import { nodeById } from '../curriculum/nodes'
 import { rankDueItems } from '../learning/scheduler'
 import { PracticeContextSetting } from '../components/PracticeContextSetting'
-import { AnswerInputSetting } from '../components/AnswerInputSetting'
 import { resumeListening } from '../audio/mic'
 import { audioIsOn } from '../stores/audioUi'
 import { useLearning } from '../stores/learning'
+import { GuitarScreen } from './GuitarScreen'
 
-const WEEKDAYS = ['一', '二', '三', '四', '五', '六', '日']
-
-export function TodayScreen() {
+/** The only practice entry: choose an answer method and a skill, then start or resume. */
+export function TodayScreen({ forceInstrument = false }: { forceInstrument?: boolean }) {
   const learning = useLearning()
   const [starting, setStarting] = useState(false)
   const [error, setError] = useState('')
+  const [rhythmOpen, setRhythmOpen] = useState(false)
   const now = Date.now()
   const due = useMemo(() => rankDueItems(learning.reviews.values(), now), [learning.reviews, now])
-  const recs = useMemo(() => recommendations(learning.attempts, learning.reviews, learning.mastery, now), [learning.attempts, learning.reviews, learning.mastery, now])
-  const weak = useMemo(() => weakItems(learning.reviews.values(), 3), [learning.reviews])
-  const week = practiceDaysThisWeek(learning.attempts, now)
-  const practisedDays = week.filter(Boolean).length
-  const familiar = [...learning.mastery.values()].filter(m => m.state === 'familiar' || m.state === 'fluent').length
-  const available = NODES.filter(n => n.availability === 'available').length
+  const instrument = learning.preferences.practiceContext === 'instrument'
   const active = learning.activeSession
-  const activeRemaining = active ? active.plannedItems.slice(active.cursor).filter(i => i.kind === 'question').length : 0
-
+  useEffect(() => { if (forceInstrument && learning.loaded) void useLearning.getState().savePreferences({ practiceContext: 'instrument', answerInput: 'play' }) }, [forceInstrument, learning.loaded])
   async function start() {
-    if (learning.preferences.answerInput === 'play') resumeListening()
-    setStarting(true)
-    try { navigate(`/session/${await learning.startGuided(audioIsOn())}`) }
-    catch { setError('無法建立練習（本機儲存空間可能被封鎖）。') }
+    setStarting(true); setError('')
+    try {
+      await learning.savePreferences({ answerInput: instrument ? 'play' : 'tap', practiceFocus: learning.preferences.practiceFocus === 'positions' ? 'notes' : learning.preferences.practiceFocus })
+      if (instrument) resumeListening()
+      navigate(`/session/${await useLearning.getState().startGuided(audioIsOn())}`)
+    } catch { setError('無法開始練習，請檢查本機儲存後再試。') }
     finally { setStarting(false) }
   }
-
-  return <div className="today">
-    <PracticeContextSetting/>
-    {active && (activeRemaining > 0 || active.mode === 'guided') && <section className="card continue-card">
-      <div><p className="eyebrow">繼續 CONTINUE</p><h2>{active.mode === 'guided' ? '接著上次的練習' : `上次的練習還剩 ${activeRemaining} 題`}</h2><p className="helper">{active.mode === 'lesson' ? nodeById(active.settings.nodeId ?? '')?.title : '離開不會丟掉進度。'}</p></div>
-      <button className="primary-button" onClick={() => { if (learning.preferences.answerInput === 'play') resumeListening(); navigate(`/session/${active.id}`) }}>繼續 →</button>
-    </section>}
-
+  return <div className="today practice-hub">
     <section className="card start-card">
-      <p className="eyebrow">今日練習 TODAY</p>
-      <h2>{due.length ? `${due.length} 個項目到期複習` : learning.attempts.length ? '今天沒有到期的項目，學點新的吧' : '從六條弦的音名開始：第 6、5 弦以外也能說出來'}</h2>
-      <AnswerInputSetting/>
-      <button className={`${active ? 'secondary-button' : 'primary-button'} wide big`} disabled={starting || !learning.loaded} onClick={() => void start()}>{active ? '改練目前選的主題' : '▶ 開始練習'}</button>
-      <p className="helper">{learning.preferences.answerInput === 'play' ? '用吉他彈出題目要的音，麥克風會聽。做到不想練再離開，進度會留著。' : '在指板上點一下就送出。做到不想練再離開，進度會留著。持琴任務在「持琴練習」頁，回家再彈。'}</p>
+      <PracticeContextSetting/>
+      <button className="primary-button wide big" disabled={starting || !learning.loaded} onClick={() => void start()}>{active ? '開始新一輪' : '▶ 開始練習'}</button>
+      {due.length > 0 && <p className="helper">{due.length} 個項目待複習</p>}
+      {instrument && learning.preferences.practiceFocus === 'naming' && <p className="helper">音名題使用按鈕回答。</p>}
       {error && <p className="notice" role="alert">{error}</p>}
     </section>
-
-    {recs.length > 0 && <section className="card">
-      <h3>建議 <small className="muted">（只是建議，任何主題都能自由選）</small></h3>
-      <ul className="rec-list">{recs.map((r, i) => <li key={i}>
-        <button className="rec" onClick={() => r.nodeId ? navigate(`/learn/${r.nodeId}`) : void start()}>
-          <strong>{r.title}</strong><span>{r.reason}</span>
-        </button>
-      </li>)}</ul>
+    {active && <section className="card continue-card">
+      <div><h2>接著上次練習</h2><p className="helper">{active.settings.practiceContext === 'instrument' ? '彈吉他' : '通勤練習'}{active.settings.nodeId ? ` · ${nodeById(active.settings.nodeId)?.title.replace(/\s+[A-Za-z].*$/, '') ?? ''}` : ''}</p></div>
+      <button className="secondary-button" onClick={() => navigate(`/session/${active.id}`)}>繼續 →</button>
     </section>}
-
-    <section className="card week-card">
-      <div className="section-head"><div><h3>本週</h3><p>目標：每週 {learning.preferences.weeklyGoalDays} 天 · 已練 {practisedDays} 天</p></div></div>
-      <div className="week-dots" aria-label={`本週練習了 ${practisedDays} 天`}>
-        {week.map((done, i) => <span key={i} className={done ? 'done' : ''}><i aria-hidden="true">{done ? '●' : '○'}</i>{WEEKDAYS[i]}</span>)}
-      </div>
-      <p className="helper">漏掉幾天沒關係，進度不會歸零。回來時會先複習最需要的項目。</p>
-    </section>
-
-    <section className="card overview-card">
-      <div className="stat"><strong>{familiar}/{available}</strong><span>主題已熟悉</span></div>
-      <div className="stat"><strong>{learning.reviews.size}</strong><span>練過的項目</span></div>
-      <button className="stat link" onClick={() => navigate('/guitar')}><strong>{learning.bridgeQueue.length}</strong><span>待彈的吉他任務</span></button>
-    </section>
-
-    {weak.length > 0 && <section className="card">
-      <h3>需要加強</h3>
-      <ul className="weak-list">{weak.map(w => <li key={w.itemId}><strong>{itemLabel(w.itemId)}</strong><span>{w.reason}</span></li>)}</ul>
-      <button className="text-button" onClick={() => navigate('/progress')}>看完整進度 →</button>
-    </section>}
+    <div className="practice-other" aria-label="其他練習"><button className="secondary-button" onClick={() => navigate('/practice/ear')}>聽力練習</button><button className="secondary-button" onClick={() => navigate('/practice/positions')}>找出同音的所有位置</button></div>
+    {instrument && <><GuitarScreen/><details className="practice-tools-drawer" onToggle={e => setRhythmOpen(e.currentTarget.open)}><summary>節拍與換和弦</summary>{rhythmOpen && <InstrumentTools purpose="rhythm"/>}</details></>}
   </div>
 }

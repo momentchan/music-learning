@@ -1,7 +1,7 @@
 import { useEffect } from 'react'
 import { OfflineStatus } from '../components/OfflineStatus'
 import { t } from '../i18n/zh-TW'
-import { GuitarScreen } from '../screens/GuitarScreen'
+import { EarTraining, Fretboard as AllPositions } from '../screens/lab/LabTools'
 import { LabScreen } from '../screens/lab/LabScreen'
 import { LearnScreen, NodeScreen } from '../screens/LearnScreen'
 import { ProgressScreen } from '../screens/ProgressScreen'
@@ -14,16 +14,15 @@ import { useLearning } from '../stores/learning'
 import { navigate, useRoute, type Route } from './router'
 
 const NAV = [
-  { id: 'today', path: '/', icon: '◎', label: t.nav.today },
-  { id: 'learn', path: '/learn', icon: '◇', label: t.nav.learn },
-  { id: 'lab', path: '/lab', icon: '♫', label: t.nav.lab },
-  { id: 'guitar', path: '/guitar', icon: '♪', label: t.nav.guitar },
-  { id: 'progress', path: '/progress', icon: '▤', label: t.nav.progress },
+  { id: 'today', path: '/', label: t.nav.today },
+  { id: 'learn', path: '/learn', label: t.nav.learn },
+  { id: 'lab', path: '/lab', label: t.nav.lab },
+  { id: 'progress', path: '/progress', label: t.nav.progress },
 ] as const
 
-const navFor = (route: Route) => route.name === 'node' ? 'learn' : route.name === 'today' || route.name === 'session' ? 'today' : route.name
+const navFor = (route: Route) => route.name === 'node' ? 'learn' : ['today', 'session', 'guitar', 'ear-practice', 'positions-practice'].includes(route.name) ? 'today' : route.name
 
-const TITLES: Partial<Record<Route['name'], string>> = { learn: '學習地圖', lab: '工具', guitar: '持琴練習', progress: '進度', settings: '設定' }
+const TITLES: Partial<Record<Route['name'], string>> = { today: '練習', learn: '課程', lab: '工具', guitar: '練習', progress: '進度', 'ear-practice': '聽力練習', 'positions-practice': '找出同音的所有位置', settings: '設定' }
 
 export default function App() {
   const route = useRoute()
@@ -47,16 +46,17 @@ export default function App() {
     if (state.loaded && route.name !== 'session') void state.refresh()
   }, [route.name])
 
+  const soundMuted = options.silent || !options.enabled
   const inSession = route.name === 'session'
-  const fretboardLab = route.name === 'lab' && route.tool === 'fretboard'
+  const fretboardLab = (route.name === 'lab' && route.tool === 'fretboard') || route.name === 'positions-practice'
   const active = navFor(route)
   const title = TITLES[route.name]
 
   return <div className={`app-shell${inSession ? ' session-page' : ''}${fretboardLab ? ' fretboard-page' : ''}`}>
     <header className="topbar">
-      <button className="brand" onClick={() => navigate('/')} aria-label="Guitar Lab 首頁"><span className="brand-mark">GL</span><div><strong>{t.appName}</strong><small>{t.tagline}</small></div></button>
+      <button className="brand" onClick={() => navigate('/')} aria-label="Guitar Lab 首頁"><span className="brand-mark">GL</span><div><strong>{t.appName}</strong></div></button>
       <div className="topbar-actions">
-        <button className={`sound-pill ${options.silent ? 'muted' : ''}`} onClick={() => void update({ silent: !options.silent })} aria-label={options.silent ? 'Turn sound on' : 'Turn silent mode on'}>{options.silent ? t.common.silent : t.common.soundOn}</button>
+        <button title="題目與示範音，不影響麥克風收音" className={`sound-pill ${soundMuted ? 'muted' : ''}`} onClick={() => void update({ enabled: true, silent: !soundMuted })} aria-label={soundMuted ? 'Turn sound on' : 'Turn silent mode on'}>{soundMuted ? t.common.silent : t.common.soundOn}</button>
         {!inSession && <button className="icon-button" onClick={() => navigate('/settings')} aria-label={t.common.settings}>⚙</button>}
       </div>
     </header>
@@ -70,11 +70,13 @@ export default function App() {
       {route.name === 'node' && <NodeScreen nodeId={route.nodeId}/>}
       {route.name === 'session' && <SessionScreen sessionId={route.sessionId}/>}
       {route.name === 'lab' && <LabScreen tool={route.tool}/>}
-      {route.name === 'guitar' && <GuitarScreen/>}
+      {route.name === 'guitar' && <TodayScreen forceInstrument/>}
+      {route.name === 'ear-practice' && <><button className="text-button" onClick={() => navigate('/')}>← 回到練習</button><EarTraining run={audioUi.run} stop={audioUi.stop}/></>}
+      {route.name === 'positions-practice' && <><button className="text-button" onClick={() => navigate('/')}>← 回到練習</button><AllPositions run={audioUi.run} purpose="all-positions"/></>}
       {route.name === 'progress' && <ProgressScreen/>}
       {route.name === 'settings' && <SettingsScreen/>}
       {route.name === 'not-found' && <div className="card"><h2>找不到這個頁面</h2><button className="primary-button" onClick={() => navigate('/')}>回到今日</button></div>}
     </main>
-    {!inSession && <nav className="bottom-nav" aria-label="主要導覽">{NAV.map(item => <button key={item.id} className={active === item.id ? 'selected' : ''} onClick={() => navigate(item.path)} aria-current={active === item.id ? 'page' : undefined}><span aria-hidden="true">{item.icon}</span><small>{item.label}</small></button>)}</nav>}
+    {!inSession && <nav className="bottom-nav" aria-label="主要導覽">{NAV.map(item => <button key={item.id} className={active === item.id ? 'selected' : ''} onClick={() => navigate(item.path)} aria-current={active === item.id ? 'page' : undefined}><small>{item.label}</small></button>)}</nav>}
   </div>
 }

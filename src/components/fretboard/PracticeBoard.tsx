@@ -19,7 +19,7 @@ export function PracticeBoard(props: Omit<FretboardProps, 'orientation'>) {
   const localMax = Math.min(limit, max)
   const validRange = localMin <= localMax
   return <div className={`practice-board ${whole ? 'show-whole' : ''}`}>
-    <div className="board-caption"><span>{props.leftHanded ? '左手演奏視角 · 琴枕在右' : '演奏者視角 · 琴枕在左'} · 上方是第 6 弦</span><button type="button" className="text-button board-view-toggle" onClick={() => setWhole(!whole)}>{whole ? '局部把位' : '整個指板'}</button></div>
+    <div className="board-caption"><span>{props.leftHanded ? '左手琴' : ''}</span><button type="button" className="text-button board-view-toggle" onClick={() => setWhole(!whole)}>{whole ? '局部把位' : '全指板'}</button></div>
     <div className="board-overview" role="img" aria-label={`全指板定位：目前第 ${localMin}–${localMax} 格`}>
       <svg viewBox="0 0 312 46" aria-hidden="true">
         {Array.from({ length: 13 }, (_, f) => {
@@ -33,6 +33,6 @@ export function PracticeBoard(props: Omit<FretboardProps, 'orientation'>) {
     </div>
     <div className="local-board">{narrow && !whole && validRange && <Fretboard {...props} minFret={localMin} maxFret={localMax} orientation="playing"/>}</div>
     <div className="whole-board">{(!narrow || whole) && <Fretboard {...props} minFret={0} maxFret={12} selectableRange={[lo, hi]} orientation="playing"/>}</div>
-    <p className="helper board-range-help">{whole ? '全指板可左右捲動；切換局部把位可放大作答。' : '可切換把位找答案；小地圖只用來定位。'} · 圓點標示音，弦號不代表手指。</p>
+
   </div>
 }

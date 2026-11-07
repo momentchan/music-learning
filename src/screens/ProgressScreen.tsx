@@ -5,7 +5,7 @@ import { navigate } from '../app/router'
 import { NODES, PATHWAYS, UNLISTED_NODE_IDS, nodeById } from '../curriculum/nodes'
 import { repository } from '../database/repository'
 import { itemLabel } from '../learning/labels'
-import { NODE_STATE_LABEL, pathwayCompletion, weakItems } from '../learning/mastery'
+import { NODE_STATE_LABEL, pathwayCompletion, weakItems, practiceDaysThisWeek } from '../learning/mastery'
 import type { PracticeSession } from '../learning/records'
 import { boxLabel, isMissed } from '../learning/scheduler'
 import { PC_SHARP, displayNote } from '../music-theory/notes'
@@ -32,13 +32,15 @@ export function ProgressScreen() {
     if (a.inputMethod === 'microphone' || a.string == null || a.fret == null) continue
     positions.set(`${a.string}-${a.fret}`, { string: a.string, fret: a.fret, label: a.correct ? '✓' : '×', tone: a.correct ? 'correct' : 'wrong' })
   }
+  const week = practiceDaysThisWeek(learning.attempts, Date.now())
   const pitchAttempts = learning.attempts.filter(a => a.inputMethod === 'microphone')
   return <div className="progress">
     {error && <p role="alert">{error}</p>}
+    <section className="card week-card"><h3>本週</h3><p>{week.filter(Boolean).length} / {learning.preferences.weeklyGoalDays} 天</p><div className="week-dots" aria-label="本週練習紀錄">{week.map((done, i) => <span key={i} className={done ? 'done' : ''}><i aria-hidden="true">{done ? '●' : '○'}</i>{['一','二','三','四','五','六','日'][i]}</span>)}</div></section>
     <section className="card"><h3>實際練過的指板位置</h3><div className="progress-evidence"><span>位置紀錄 {positions.size} 格</span><span>音高驗證 {pitchAttempts.filter(a => a.correct).length}/{pitchAttempts.length} 次正確</span><span>持琴自評 {learning.selfReports.length} 次</span></div><p className="helper">✓ 最近答對的位置 · × 最近答錯的位置。空白代表沒有位置紀錄；音高驗證與自評不會填滿這張圖。</p><PracticeBoard tuning={[40,45,50,55,59,64]} marks={[...positions.values()]} leftHanded={learning.preferences.leftHanded} label="實際作答位置與最近結果"/></section>
     <section className="card">
       <h3>主題熟練度</h3>
-      <p className="helper">熟悉 = 至少 8 次作答、兩天以上、正確率 ≥ 80%，且一半以上的項目進入 3 天以上複習間隔。流暢 = 再加上應用題 ≥ 75% 與 80% 項目進入 7 天以上間隔。</p>
+      <details className="mastery-method"><summary>如何計算熟練度</summary><p className="helper">熟悉 = 至少 8 次作答、兩天以上、正確率 ≥ 80%，且一半以上的項目進入 3 天以上複習間隔。流暢 = 再加上應用題 ≥ 75% 與 80% 項目進入 7 天以上間隔。</p></details>
       <ul className="mastery-list">{nodes.map(n => {
         const m = learning.mastery.get(n.id)
         return <li key={n.id}><button className="node-row" onClick={() => navigate(`/learn/${n.id}`)}>
@@ -67,7 +69,7 @@ export function ProgressScreen() {
     <section className="card">
       <h3>需要加強的項目</h3>
       {weak.length ? <ul className="weak-list">{weak.map(w => <li key={w.itemId}><strong>{itemLabel(w.itemId)}</strong><span>{w.reason}</span><button className="text-button" onClick={() => void strengthen(w.itemId)}>開始加強</button></li>)}</ul>
-        : <p className="helper">目前沒有反覆答錯的項目（至少 3 次作答才會判斷，一次答錯不算弱點）。</p>}
+        : <p className="helper">目前沒有需要加強的項目。</p>}
     </section>
 
     <section className="card">

@@ -19,15 +19,28 @@ npm run test:e2e              # Playwright: lab tools, lessons, resume, backups,
 npm run build
 ```
 
+## Navigation and microphone update
+
+There are four primary destinations:
+
+- **練習**: the single place for graded work. Choose **通勤練習** for tapping or **彈吉他** for microphone answers, then select finding notes, naming notes, intervals or chord tones. Ear exercises and finding every position of one note live here too. Rhythm/chord-change practice is under this page.
+- **課程**: explanations and a suggested learning sequence. General practice starts directly; it no longer repeats lesson introductions. The complete catalog and lesson preview are collapsed until requested.
+- **工具**: ungraded fretboard/chord lookup, sound comparisons, progression editing and tuning. Clicking the reference neck does not produce a graded attempt. There is no second quiz menu here.
+- **進度**: learning history, mastery, actual position coverage and weak items.
+
+The old `/guitar` link opens the same practice hub in guitar mode; `/lab/ear` remains an alias for ear practice. Saved attempts and sessions remain available.
+
+Microphone input now shows an independent volume meter and detected note. Starting guitar practice automatically uses microphone input for supported questions; there is no second input-method menu. The first explicitly enabled note can be graded without first waiting for silence. Between answers, release the previous note before replaying. Quiet-input detection was lowered from RMS 0.02 to 0.0015, while periodicity confidence and pitch stability still guard grading. Permission errors and low input levels are visible, with restart and device selection when multiple actual microphones exist. These changes are tested with quiet synthetic streams; real built-in microphone performance still requires the user to play and check the meter.
+
 ## Current release: pocket practice and at-the-guitar practice
 
-Choose **通勤練習** or **拿起吉他**, then pick note locations, note naming, a restricted position, adjacent-string intervals, or chord tones. On the phone, answer on a large local fret window; on the computer, use the full player-view neck. Context is suggested by screen size only on first use and stays under your control.
+Choose **通勤練習** or **拿起吉他**, then pick note locations, note naming, adjacent-string intervals, or chord tones. On the phone, answer on a large local fret window; on the computer, use the full player-view neck. Context is suggested by screen size only on first use and stays under your control.
 
-At the guitar, select microphone input and explicitly press **開始收音**. A question that specifies a played position checks its exact pitch, including the octave. The app cannot infer the string/fret from that sound: confirm the physical position yourself. Naming questions still require a note name. Microphone results are stored separately and never promote position or naming recall.
+Choose **彈吉他**, start practice, then explicitly press **開始收音**. A question that specifies a played position checks its exact pitch, including the octave. The app cannot infer the string/fret from that sound: confirm the physical position yourself. Naming questions still require a note name. Microphone results are stored separately and never promote position or naming recall.
 
 Controls: Space pauses/resumes, Enter advances after feedback, and R retries. Controls with keyboard focus retain their normal keys. Correct answers may advance automatically; incorrect answers wait for review. Settings offer fully manual advance. **結束這次** saves a summary; leaving keeps the session available to resume.
 
-For phone → computer handoff, export from **持琴練習** or the session summary, transfer the JSON file, and use **設定 → 合併匯入** on the other device. This is a manual transfer, not automatic sync. Merge deduplicates attempts, carries forward completed sessions/tasks and keeps a pre-import backup; microphone input is not enabled by importing and device latency calibration stays local.
+For phone → computer handoff, export from the session summary or Settings, transfer the JSON file, and use **設定 → 合併匯入** on the other device. This is a manual transfer, not automatic sync. Merge deduplicates attempts, carries forward completed sessions/tasks and keeps a pre-import backup; microphone input is not enabled by importing and device latency calibration stays local.
 
 Implementation notes and remaining manual checks: [PRACTICE_IMPLEMENTATION.md](PRACTICE_IMPLEMENTATION.md). The design brief and execution prompt remain [GUITAR_LAB_IMPROVEMENT_PROMPT.md](GUITAR_LAB_IMPROVEMENT_PROMPT.md).
 
@@ -75,7 +88,7 @@ Implementation notes and remaining manual checks: [PRACTICE_IMPLEMENTATION.md](P
   - Versioned JSON export/import is validated, with merge or replace and an automatic pre-import backup.
   - Persistent storage is requested and its status is shown.
 - **Lab (existing tools, kept):**
-  - fretboard explorer and quiz
+  - ungraded fretboard lookup (all-position quizzes are under Practice)
   - chord library
   - chord, interval and scale playback
   - progression sequencer

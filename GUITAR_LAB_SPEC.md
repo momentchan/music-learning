@@ -17,6 +17,12 @@ The current shipped practice contract is documented in [PRACTICE_IMPLEMENTATION.
 - Pitch reference, metronome and one-minute chord-change self-assessment are available. Real-instrument detection accuracy and mobile microphone compatibility remain unverified; advanced sequence/polyphonic detection remains future work.
 - PWA readiness and a deferred, user-triggered update replace automatic updating during practice.
 
+### Navigation simplification — current behavior
+
+Primary navigation is now Practice / Courses / Tools / Progress. Pocket and instrument are answer contexts inside the single Practice hub. Tools contain ungraded references, sound editing/comparison and tuning; ear and all-position quizzes live under Practice. Course explanations are not automatically injected into general practice. Duplicate input selectors, decorative menu glyphs, always-visible technical explanations and duplicate history blocks have been removed. Old guitar/ear URLs remain compatible.
+
+Input and output are independent. Choosing guitar practice uses microphone input for supported tasks. Explicitly starting input can accept the first note without a hidden silence prerequisite; subsequent answers require releasing the previous note. The input meter and observed pitch remain visible regardless of whether grading accepts a note. Low input, denied permission and disconnected audio are distinct states. Quiet-input regression tests do not replace real-device validation.
+
 ## 0. Mission
 
 Guitar Lab is a mobile-first, local-first web app that makes guitarists **better at playing**, not just better at answering theory quizzes.

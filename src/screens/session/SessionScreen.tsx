@@ -236,17 +236,17 @@ export function SessionScreen({ sessionId }: { sessionId: string }) {
   }
   actions.current = { next: () => { if (answer) void advance() }, retry: retryAnswer }
   return <div className={`session ${instrument ? 'instrument-session' : 'pocket-session'}`}>
-    <div className="practice-mode-label">{instrument ? '持琴練習' : '通勤練習'} · {inputMode === 'play' && item.kind === 'question' && item.question.kind === 'fret-locate' ? '音高驗證' : '指板與音名回想'}</div>
+    <div className="practice-mode-label">{instrument ? '彈吉他' : '通勤練習'} · {inputMode === 'play' && item.kind === 'question' && item.question.kind === 'fret-locate' ? '音高驗證' : '指板與音名回想'}</div>
     <div className="session-bar">
       <button type="button" className="icon-button" onClick={() => navigate('/')} aria-label="離開練習（之後可以繼續）">✕</button>
       {!openEnded && <div className="session-progress" role="progressbar" aria-valuemin={0} aria-valuemax={questionCount} aria-valuenow={answeredCount} aria-label="練習進度"><span style={{ width: `${progress * 100}%` }}/></div>}
-      <button type="button" className="secondary-button" onClick={() => { setPaused(!paused); stop(); shownAt.current = performance.now() }}>{paused ? '繼續練習' : '暫停'}</button>
+      <button type="button" className="secondary-button" title="空白鍵：暫停或繼續" aria-keyshortcuts="Space" onClick={() => { setPaused(!paused); stop(); shownAt.current = performance.now() }}>{paused ? '繼續練習' : '暫停'}</button>
       <button type="button" className="text-button" disabled={busy.current || !!saveError} onClick={() => { if (!busy.current) void finish(session) }}>結束這次</button>
       <small>{openEnded ? `已答 ${answeredCount}` : `${answeredCount}/${questionCount}`}</small>
     </div>
     {paused && <p className="notice" role="status">已暫停。進度會保留；繼續後可重新開始收音。</p>}
-    {instrument && <p className="helper shortcut-help">空白鍵：暫停／繼續 · Enter：下一題 · R：重試。控制項有焦點時使用其原本操作。</p>}
-    <p className="session-context">{node?.title}{item.kind === 'question' && <> · <span>{item.reason}</span></>}</p>
+
+    <p className="session-context">{node?.title.replace(/\s+[A-Za-z].*$/, '')}{item.kind === 'question' && <> · <span>{item.reason}</span></>}</p>
     {saveError && <div className="notice" role="alert">{saveError}{learning.unsaved.length === 0 && <button className="secondary-button" onClick={() => setSaveError('')}>重新嘗試</button>}{learning.unsaved.length > 0 && <div className="button-row">
       <button className="secondary-button" onClick={() => void learning.retryUnsaved().then(left => setSaveError(left ? t.storage.unsaved : ''))}>{t.storage.retry}</button>
       <button className="secondary-button" onClick={() => downloadJson(`guitar-lab-unsaved-${Date.now()}.json`, learning.unsaved)}>{t.storage.export}</button>
@@ -263,8 +263,7 @@ export function SessionScreen({ sessionId }: { sessionId: string }) {
       <p className="eyebrow">拿起吉他 PLAY IT · 約 {node.bridge.minutes} 分鐘</p>
       <h2>{node.title}</h2>
       <p className="bridge-text">{node.bridge.text}</p>
-      <p className="helper">這段練習在手機上已經做完。沒有吉他就先排到稍後，回家再彈。自我評估只會標記「彈過」，不會提高記憶熟練度。</p>
-      <button type="button" className="primary-button wide" onClick={() => void bridge('later')}>先排到稍後，回家再彈</button>
+            <button type="button" className="primary-button wide" onClick={() => void bridge('later')}>稍後再彈</button>
       <div className="choice-grid three">
         <button type="button" onClick={() => void bridge(0)}>還不太行</button>
         <button type="button" onClick={() => void bridge(1)}>勉強可以</button>

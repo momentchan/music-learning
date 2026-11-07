@@ -1,5 +1,10 @@
 import { expect, test, type Page } from '@playwright/test'
 
+test.beforeEach(async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: /通勤練習.*點指板/ }).click()
+})
+
 /** Answers whatever item the session shows; uses the keyboard for fretboard taps. Returns false at the summary. */
 async function answerCurrent(page: Page): Promise<boolean> {
   await expect(page.locator('.question-card, .lesson-card, .bridge-card, .summary-card').first()).toBeVisible()
@@ -40,11 +45,11 @@ async function answerCurrent(page: Page): Promise<boolean> {
   return true
 }
 
-test('cold start reaches the first practice question in two taps', async ({ page }) => {
+test('practice starts directly; lesson explanations belong to courses', async ({ page }) => {
   await page.goto('/')
   await page.getByRole('button', { name: '▶ 開始練習' }).click()
-  await page.getByRole('button', { name: /懂了，開始練習/ }).click()
   await expect(page.locator('.question-prompt')).toBeVisible()
+  await expect(page.locator('.lesson-card')).toHaveCount(0)
 })
 
 test('a lesson persists every answer, resumes after reload, and completes with a summary', async ({ page }) => {
@@ -88,7 +93,7 @@ test('deep links reload directly into a screen', async ({ page }) => {
   await page.reload()
   await expect(page.getByRole('heading', { name: /調性與順階和弦/ })).toBeVisible()
   await page.goto('/learn/chord.changes')
-  await expect(page.getByText('這個主題還在規劃中')).toBeVisible()
+  await expect(page.getByText('這個主題尚未開放。')).toBeVisible()
   await expect(page.getByRole('button', { name: '▶ 開始課程' })).toHaveCount(0)
 })
 
@@ -131,7 +136,7 @@ test('session fretboard preserves proportions and hides open-string hints on a 3
   const context = await browser.newContext({ viewport: { width: 320, height: 568 }, isMobile: true, hasTouch: true })
   const page = await context.newPage()
   await page.goto('/learn/fret.naturals.low')
-  await page.getByRole('button', { name: '自由練習 10 題' }).click()
+  await page.getByRole('button', { name: '只做練習' }).click()
   for (let i = 0; i < 10; i++) {
     if (await page.locator('.fret-cell.interactive').first().isVisible().catch(() => false)) break
     await answerCurrent(page)

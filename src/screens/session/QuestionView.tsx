@@ -63,7 +63,6 @@ export function QuestionView({ question, grade, response, onSubmit, layout, inpu
       <h2 className="question-prompt">{question.prompt}</h2>
       <div className="question-visual board"><Fretboard leftHanded={leftHanded} tuning={question.tuning} orientation={layout} marks={marks} label={`指板，題目位置：第 ${question.string} 弦 ${question.fret === 0 ? '空弦' : `第 ${question.fret} 格`}`}/></div>
       <PitchPicker disabled={answered} onPick={value => onSubmit({ kind: 'fret-identify', value })}/>
-      <p className="helper">這題練習說出音名，請選音名作答。</p>
       {answered && response?.kind === 'fret-identify' && <p className="helper">你的答案：{displayNote(response.value)}</p>}
     </div>
   }
@@ -82,9 +81,7 @@ export function QuestionView({ question, grade, response, onSubmit, layout, inpu
       <PracticeBoard leftHanded={leftHanded} tuning={question.tuning} minFret={question.minFret} maxFret={question.maxFret}
         marks={marks} onSelect={byEar ? undefined : (string, fret, inputMethod) => { if (!answered) onSubmit({ kind: 'fret-locate', string, fret, inputMethod }) }} disabled={answered || byEar}
         label={byEar ? '照圖彈奏，App 檢查音高' : '可點選的指板，上方第 6 弦，點一下送出'}/>
-      {byEar
-        ? <p className="helper">照圖彈奏，App 會檢查音高；請自行確認使用的弦與品格。</p>
-        : <p className="helper playing-hint">像看著手上的吉他：上方是粗弦，切換把位找出目標音。</p>}
+
     </div>
   }
 

@@ -1,10 +1,17 @@
 import { midiToFrequency } from '../music-theory/notes'
 
-/** Fundamental frequency in Hz, or null when the buffer is quiet or unpitched. */
-export function fundamentalHz(samples: Float32Array, sampleRate: number): number | null {
+export function signalRms(samples: Float32Array): number {
   let energy = 0
   for (let i = 0; i < samples.length; i++) energy += samples[i] * samples[i]
-  if (energy / samples.length < 0.0004) return null
+  return Math.sqrt(energy / samples.length)
+}
+
+/** Normal microphone levels are much quieter than full-scale synthetic test signals. */
+export const MIN_PITCH_RMS = 0.0015
+export interface DetectedPitch { hz: number; confidence: number }
+
+export function detectPitch(samples: Float32Array, sampleRate: number): DetectedPitch | null {
+  if (signalRms(samples) < MIN_PITCH_RMS) return null
 
   const half = Math.floor(samples.length / 2)
   const minTau = Math.max(2, Math.floor(sampleRate / 980))
@@ -49,7 +56,12 @@ export function fundamentalHz(samples: Float32Array, sampleRate: number): number
   const later = normalized[tau + 1]
   const denominator = 2 * earlier - 4 * normalized[tau] + 2 * later
   const shift = denominator === 0 ? 0 : (earlier - later) / denominator
-  return sampleRate / (tau + shift)
+  return { hz: sampleRate / (tau + shift), confidence: 1 - bestValue }
+}
+
+/** Fundamental frequency in Hz, or null when the buffer is quiet or unpitched. */
+export function fundamentalHz(samples: Float32Array, sampleRate: number): number | null {
+  return detectPitch(samples, sampleRate)?.hz ?? null
 }
 
 export function hzToMidi(hz: number): number {

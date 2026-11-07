@@ -2,6 +2,16 @@ import { describe, expect, it } from 'vitest'
 import { NoteGate } from './noteGate'
 
 describe('new pluck gate', () => {
+  it('accepts a first note after explicit start without requiring hidden initial silence', () => {
+    const gate = new NoteGate()
+    gate.reset(false)
+    expect(gate.sample(130.81, 0)).toBeNull()
+    expect(gate.sample(130.81, 50)).toBeNull()
+    expect(gate.sample(130.81, 110)?.midi).toBe(48)
+    expect(gate.sample(130.81, 200)).toBeNull()
+    gate.reset()
+    for (let t = 250; t < 750; t += 50) expect(gate.sample(130.81, t)).toBeNull()
+  })
   it('requires silence before an attack and does not accept lingering sound', () => {
     const gate = new NoteGate()
     for (let t = 0; t < 800; t += 50) expect(gate.sample(130.81, t)).toBeNull()

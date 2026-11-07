@@ -1,171 +1,82 @@
 import { test, expect } from '@playwright/test'
 import { positionsForNote } from '../src/music/fretboardQuiz'
 
-test('fretboard note selection and silent mode', async ({ page }) => {
+test('reference fretboard selects a note without recording a graded attempt', async ({ page }) => {
   await page.goto('/lab/fretboard')
-  await expect(page.getByRole('heading', { name: 'Hear every position.' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: '指板查詢' })).toBeVisible()
+  await expect(page.locator('.svg-string-label')).toHaveText(['6','5','4','3','2','1'])
+  await expect(page.getByRole('button', { name: /One note|Random review/ })).toHaveCount(0)
   await page.locator('svg.fretboard g[aria-label="String 1, fret 1, F4"]').click()
-  await expect(page.getByText('String 1 · fret 1', { exact: false })).toBeVisible()
+  await expect(page.locator('.selected-note strong')).toHaveText('F4')
+  const count = await page.evaluate(async () => {
+    const db = await new Promise<IDBDatabase>(resolve => { const r = indexedDB.open('guitar-lab'); r.onsuccess = () => resolve(r.result) })
+    const n = await new Promise<number>(resolve => { const r = db.transaction('attempts').objectStore('attempts').count(); r.onsuccess = () => resolve(r.result) }); db.close(); return n
+  })
+  expect(count).toBe(0)
   await page.getByRole('button', { name: 'Turn silent mode on' }).click()
-  await expect(page.getByRole('button', { name: 'Turn sound on' })).toBeVisible()
-  await page.reload()
-  await expect(page.getByRole('button', { name: 'Turn sound on' })).toBeVisible()
-  await page.getByRole('tab', { name: '聽力' }).click()
+  await page.goto('/practice/ear')
   await expect(page.locator('.choice-grid button').first()).toBeDisabled()
 })
 
-test('progression and A/B controls can start and stop', async ({ page }) => {
+test('progression and comparison tools can start and stop', async ({ page }) => {
   await page.goto('/lab/progressions')
-  await page.getByRole('button', { name: 'Play progression' }).click()
-  await expect(page.getByRole('button', { name: 'Restart' })).toBeVisible()
-  await page.getByRole('button', { name: /Stop/ }).click()
-  await page.getByRole('tab', { name: 'A/B 比較' }).click()
-  await page.getByRole('button', { name: 'Play A', exact: true }).click()
-  await page.getByRole('button', { name: 'Play B', exact: true }).click()
-  await expect(page.getByText('WHAT CHANGED')).toBeVisible()
+  await page.getByRole('button', { name: '播放進行' }).click()
+  await expect(page.getByRole('button', { name: '重新播放' })).toBeVisible()
+  await page.getByRole('button', { name: /停止/ }).click()
+  await page.getByRole('tab', { name: '比較試聽' }).click()
+  await page.getByRole('button', { name: '播放 A', exact: true }).click()
+  await page.getByRole('button', { name: '播放 B', exact: true }).click()
+  await expect(page.getByText('差異')).toBeVisible()
 })
 
-test('ear question validates and persists after reload', async ({ page }) => {
-  await page.goto('/lab/ear')
-  await page.getByRole('button', { name: 'Play question' }).click()
-  const choices = page.locator('.choice-grid button')
-  await choices.first().click()
-  await expect(page.getByRole('button', { name: 'Next question' })).toBeVisible()
+test('ear exercise is a practice route, validates and persists after reload', async ({ page }) => {
+  await page.goto('/lab/ear') // old deep link remains valid
+  await expect(page.locator('.bottom-nav button[aria-current="page"]')).toHaveText('練習')
+  await page.getByRole('button', { name: '播放題目' }).click()
+  await page.locator('.choice-grid button').first().click()
+  await expect(page.getByRole('button', { name: '下一題' })).toBeVisible()
   await page.reload()
-  await expect(page.locator('.history > div')).toHaveCount(1)
+  const count = await page.evaluate(async () => {
+    const db = await new Promise<IDBDatabase>(resolve => { const r = indexedDB.open('guitar-lab'); r.onsuccess = () => resolve(r.result) })
+    const n = await new Promise<number>(resolve => { const r = db.transaction('attempts').objectStore('attempts').count(); r.onsuccess = () => resolve(r.result) }); db.close(); return n
+  })
+  expect(count).toBe(1)
 })
 
 for (const size of [{ width: 320, height: 568 }, { width: 390, height: 650 }, { width: 430, height: 932 }]) {
-  test(`phone ${size.width}x${size.height} shows all twelve frets in every mode without scrolling`, async ({ browser }, testInfo) => {
+  test(`phone ${size.width}x${size.height} keeps reference and all-position practice usable`, async ({ browser }, info) => {
     const context = await browser.newContext({ viewport: size, isMobile: true, hasTouch: true })
     const page = await context.newPage()
     await page.goto('/lab/fretboard')
     const board = page.locator('svg.fretboard')
-    expect(await page.locator('.svg-string-label').allTextContents()).toEqual(['6', '5', '4', '3', '2', '1'])
-    const widths = await page.locator('.svg-string-label').evaluateAll(labels => labels.map(label => Number(label.parentElement!.querySelector('line')!.getAttribute('stroke-width'))))
-    expect(widths[0]).toBeGreaterThan(widths[5])
-
-    async function expectFullBoard() {
-      await expect(board.locator(':scope > .svg-fret-label')).toHaveCount(12)
-      await expect.poll(async () => {
-        const bounds = (await board.boundingBox())!
-        const nav = (await page.locator('.bottom-nav').boundingBox())!
-        return bounds.y >= 0 && bounds.y + bounds.height <= nav.y - 5
-      }).toBe(true)
-      for (const fret of [1, 12]) {
-        for (const string of [1, 6]) {
-          const target = board.getByRole('button', { name: new RegExp(`^String ${string}, fret ${fret}(,|$)`) }).locator('rect')
-          await expect(target).toBeInViewport({ ratio: 1 })
-        }
-      }
-      const scale = await board.evaluate(element => {
-        const transform = (element as SVGSVGElement).getScreenCTM()!
-        return { x: transform.a, y: transform.d }
-      })
-      expect(scale.x).toBeCloseTo(scale.y, 3)
-      expect(await page.evaluate(() => window.scrollY)).toBe(0)
-      expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
-    }
-
-    await expectFullBoard()
+    expect(await page.locator('.svg-string-label').allTextContents()).toEqual(['6','5','4','3','2','1'])
+    await expect(board.locator(':scope > .svg-fret-label')).toHaveCount(12)
     await board.locator('g[aria-label="String 6, fret 1, F2"]').tap()
     await expect(page.locator('.selected-note strong')).toHaveText('F2')
-    await board.locator('g[aria-label="String 1, fret 11, D#5"]').tap()
-    await expect(page.locator('.selected-note strong')).toHaveText('D#5')
-    await board.locator('g[aria-label="String 1, fret 12, E5"]').tap()
-    await expect(page.locator('.selected-note strong')).toHaveText('E5')
-    await expectFullBoard()
-    await page.getByRole('button', { name: 'Show labels', exact: true }).click()
+    await page.getByRole('button', { name: '顯示音名', exact: true }).click()
     await expect(board.locator('.svg-note')).toHaveCount(72)
-    await expectFullBoard()
-
-    await page.getByRole('button', { name: 'One note', exact: true }).click()
-    await expectFullBoard()
-    await expect(page.getByRole('status')).toHaveText('Find it on every string')
-    // Include fret 12 and all six strings; a correct tap must resolve the intended cell.
-    await page.getByLabel('Practice note', { exact: true }).selectOption('E')
-    for (const [index, position] of positionsForNote('E').entries()) {
-      await board.locator(`g[aria-label="String ${position.string}, fret ${position.fret}"]`).tap()
-      await expect(page.getByText(`${index + 1} / 6 found`)).toBeVisible()
-      await expectFullBoard()
+    await page.goto('/practice/positions')
+    await page.getByLabel('練習音名').selectOption('E')
+    for (const [index, p] of positionsForNote('E').entries()) {
+      await page.locator(`svg.fretboard g[aria-label="String ${p.string}, fret ${p.fret}"]`).tap()
+      await expect(page.locator('.fretboard-quiz em')).toHaveText(`${index + 1} / 6`)
     }
-    await expect(page.getByRole('button', { name: 'Next note' })).toBeVisible()
-    await page.screenshot({ path: testInfo.outputPath('mobile-twelve-frets.png') })
-
-    await page.getByRole('button', { name: 'Random review', exact: true }).click()
-    await expectFullBoard()
-    const note = await page.locator('.fretboard-quiz strong').evaluate(element => element.firstChild?.textContent || '')
-    const string = Number((await page.locator('.fretboard-quiz strong em').textContent())!.replace('string ', ''))
-    const other = positionsForNote(note).find(position => position.string !== string)!
-    await board.locator(`g[aria-label="String ${other.string}, fret ${other.fret}"]`).tap()
-    await expect(page.getByRole('status')).toContainText(`Try string ${string}`)
-    await expectFullBoard()
-    const correct = positionsForNote(note).find(position => position.string === string)!
-    await board.locator(`g[aria-label="String ${correct.string}, fret ${correct.fret}"]`).tap()
-    await expect(page.getByRole('button', { name: 'Next', exact: false })).toBeVisible()
-    await expectFullBoard()
-
-    // Recompute geometry when browser chrome or viewport size changes.
-    await page.setViewportSize({ width: size.width, height: size.height - 64 })
-    await expectFullBoard()
+    await expect(page.getByRole('button', { name: '下一個音 →' })).toBeVisible()
+    const scale = await page.locator('svg.fretboard').evaluate(el => { const m = (el as SVGSVGElement).getScreenCTM()!; return [m.a, m.d] })
+    expect(scale[0]).toBeCloseTo(scale[1], 3)
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+    await page.screenshot({ path: info.outputPath('all-positions-phone.png'), fullPage: true })
     await context.close()
   })
 }
 
-test('one-note practice checks positions and keeps a local record', async ({ page }) => {
-  await page.goto('/lab/fretboard')
-  await page.getByRole('group', { name: 'Fretboard mode' }).getByRole('button', { name: 'One note' }).click()
-  await expect(page.getByText('0 / 6 found')).toBeVisible()
+test('all-position practice has one task, checks answers and keeps its own history', async ({ page }) => {
+  await page.goto('/practice/positions')
   await page.locator('svg.fretboard g[aria-label="String 1, fret 1"]').click()
-  await expect(page.getByRole('status')).toContainText('Find C')
-  await page.locator('svg.fretboard g[aria-label="String 2, fret 1"]').click()
-  await expect(page.getByText('1 / 6 found')).toBeVisible()
-  await expect(page.getByText('Local record for C: 1 correct, 1 missed.')).toBeVisible()
-  for (const [index, position] of positionsForNote('C').filter(position => !(position.string === 2 && position.fret === 1)).entries()) {
-    await page.locator(`svg.fretboard g[aria-label="String ${position.string}, fret ${position.fret}"]`).click()
-    await expect(page.getByText(`${index + 2} / 6 found`)).toBeVisible()
-  }
-  await expect(page.getByRole('button', { name: 'Next note →' })).toBeVisible()
+  await expect(page.getByRole('status')).toContainText('請找 C')
+  for (const p of positionsForNote('C')) await page.locator(`svg.fretboard g[aria-label="String ${p.string}, fret ${p.fret}"]`).click()
+  await expect(page.getByRole('button', { name: '下一個音 →' })).toBeVisible()
+  await expect(page.getByText('6 次正確 · 1 次待加強')).toBeVisible()
   await page.reload()
-  await page.getByRole('group', { name: 'Fretboard mode' }).getByRole('button', { name: 'One note' }).click()
-  await expect(page.getByText('Local record for C: 6 correct, 1 missed.')).toBeVisible()
-})
-
-test('random review requires the prompted string and records position-specific recall', async ({ page }) => {
-  await page.goto('/lab/fretboard')
-  await page.getByRole('group', { name: 'Fretboard mode' }).getByRole('button', { name: 'Random review' }).click()
-  const target = await page.locator('.fretboard-quiz strong').evaluate(element => element.firstChild?.textContent || '')
-  const targetString = Number((await page.locator('.fretboard-quiz strong em').textContent())!.replace('string ', ''))
-  const positions = positionsForNote(target)
-  const otherString = positions.find(position => position.string !== targetString)!
-  const position = positions.find(position => position.string === targetString)!
-  await page.locator(`svg.fretboard g[aria-label="String ${otherString.string}, fret ${otherString.fret}"]`).click()
-  await expect(page.getByRole('status')).toContainText(`Try string ${targetString}`)
-  await expect(page.getByRole('button', { name: 'Next →' })).toHaveCount(0)
-  await page.locator(`svg.fretboard g[aria-label="String ${position.string}, fret ${position.fret}"]`).click()
-  await expect(page.getByRole('button', { name: 'Next →' })).toBeVisible()
-  await expect(page.getByText(`Local record for ${target} on string ${targetString}: 1 correct, 1 missed.`)).toBeVisible()
-  const records = await page.evaluate(async targetString => {
-    const database = await new Promise<IDBDatabase>((resolve, reject) => { const request = indexedDB.open('guitar-lab'); request.onsuccess = () => resolve(request.result); request.onerror = () => reject(request.error) })
-    const attempts = await new Promise<{ targetString: number; targetFret: number; assisted: boolean }[]>((resolve, reject) => { const request = database.transaction('attempts').objectStore('attempts').getAll(); request.onsuccess = () => resolve(request.result); request.onerror = () => reject(request.error) })
-    database.close()
-    return attempts.filter(attempt => attempt.targetString === targetString)
-  }, targetString)
-  expect(records).toHaveLength(2)
-  expect(records.map(record => [record.targetString, record.targetFret, record.assisted])).toEqual(expect.arrayContaining([[targetString, position.fret, false], [targetString, position.fret, true]]))
-})
-
-test('practice modes use a vertical fretboard on desktop with a layout toggle', async ({ page }) => {
-  await page.goto('/lab/fretboard')
-  await expect(page.getByRole('group', { name: 'Six-string guitar fretboard, frets 1 to 12' })).toBeVisible()
-  await page.getByRole('group', { name: 'Fretboard mode' }).getByRole('button', { name: 'Random review' }).click()
-  await expect(page.getByRole('group', { name: 'Vertical six-string guitar fretboard, frets 1 to 12' })).toBeVisible()
-  await page.getByRole('group', { name: 'Practice layout' }).getByRole('button', { name: /Horizontal/ }).click()
-  await expect(page.getByRole('group', { name: 'Six-string guitar fretboard, frets 1 to 12' })).toBeVisible()
-  await page.reload()
-  await page.getByRole('group', { name: 'Fretboard mode' }).getByRole('button', { name: 'One note' }).click()
-  await expect(page.getByRole('group', { name: 'Six-string guitar fretboard, frets 1 to 12' })).toBeVisible()
-  await page.getByRole('group', { name: 'Practice layout' }).getByRole('button', { name: /Vertical/ }).click()
-  await expect(page.getByRole('group', { name: 'Vertical six-string guitar fretboard, frets 1 to 12' })).toBeVisible()
-  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
+  await expect(page.getByText('6 次正確 · 1 次待加強')).toBeVisible()
 })

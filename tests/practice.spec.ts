@@ -1,5 +1,12 @@
 import { expect, test, type Page } from '@playwright/test'
 
+async function startPractice(page: Page) {
+  await page.getByRole('button', { name: '▶ 開始練習' }).click()
+  await expect(page.locator('.lesson-card, .question-prompt').first()).toBeVisible()
+  const intro = page.getByRole('button', { name: /懂了，開始練習/ })
+  if (await intro.isVisible()) await intro.click()
+}
+
 async function attempts(page: Page) {
   return page.evaluate(async () => {
     const db = await new Promise<IDBDatabase>((resolve, reject) => {
@@ -15,8 +22,8 @@ test('portrait practice has large targets, no swipe answer, correct keyboard map
   const context = await browser.newContext({ viewport: { width: 320, height: 568 }, isMobile: true, hasTouch: true })
   const page = await context.newPage()
   await page.goto('/')
-  await page.getByLabel('這次練什麼').selectOption('positions')
-  await page.getByRole('button', { name: '▶ 開始練習' }).click()
+  await page.getByLabel('這次練什麼').selectOption('notes')
+  await startPractice(page)
   await expect(page.locator('.question-prompt')).toBeVisible()
   const cell = page.locator('.fret-cell.interactive').first()
   await expect(page.locator('.local-board .svg-fret-label')).toHaveCount(4)
@@ -59,17 +66,16 @@ test('instrument answers verify the actual octave without granting position reca
     } })
   })
   await page.goto('/')
-  await page.getByRole('button', { name: /拿起吉他.*看指板/ }).click()
-  await page.getByLabel('這次練什麼').selectOption('positions')
-  await page.getByLabel('找音題作答方式').selectOption('play')
-  await page.getByRole('button', { name: '▶ 開始練習' }).click()
+  await page.getByRole('button', { name: /彈吉他.*麥克風作答/ }).click()
+  await page.getByLabel('這次練什麼').selectOption('notes')
+  await startPractice(page)
   await expect(page.locator('.question-prompt')).toContainText('照圖彈奏')
   expect(await page.evaluate(() => (window as unknown as { micCalls: number }).micCalls)).toBe(0)
   const prompt = await page.locator('.question-prompt').textContent()
   const match = /第 (\d) 弦(?:第 (\d+) 格|空弦)/.exec(prompt!)!
   const midi = [40,45,50,55,59,64][6 - Number(match[1])] + Number(match[2] ?? 0)
   await page.getByRole('button', { name: '開始收音', exact: true }).click()
-  await expect(page.getByText('收音中：先讓琴弦安靜，再彈一個音。')).toBeVisible()
+  await expect(page.getByRole('button', { name: '停止收音', exact: true })).toBeVisible()
   // A full octave must fail, even though the note name is the same.
   const wrong = midi + 12 <= 76 ? midi + 12 : midi - 12
   await page.waitForTimeout(250)
@@ -91,10 +97,56 @@ test('naming stays naming with microphone selected; left-handed arrow direction 
   await page.goto('/settings')
   await page.getByLabel('左手琴顯示').check()
   await page.goto('/')
-  await page.getByRole('button', { name: /拿起吉他.*看指板/ }).click()
+  await page.getByRole('button', { name: /彈吉他.*麥克風作答/ }).click()
   await page.getByLabel('這次練什麼').selectOption('naming')
-  await page.getByLabel('找音題作答方式').selectOption('play')
-  await page.getByRole('button', { name: '▶ 開始練習' }).click()
+  await startPractice(page)
   await expect(page.locator('.pitch-picker')).toBeVisible()
-  await expect(page.getByText('這題練習說出音名，請選音名作答。')).toBeVisible()
+  await expect(page.getByRole('button', { name: '開始收音', exact: true })).toHaveCount(0)
+})
+
+test('quiet built-in-microphone levels produce visible feedback and grade the first note without waiting for silence', async ({ page }, info) => {
+  await page.addInitScript(() => {
+    const state = window as Window & { targetMidi: number; micCalls: number }
+    state.micCalls = 0
+    Object.defineProperty(navigator.mediaDevices, 'getUserMedia', { value: async () => {
+      state.micCalls++
+      const context = new AudioContext(); await context.resume()
+      const output = context.createMediaStreamDestination()
+      const gain = context.createGain(); gain.gain.value = .008
+      const oscillator = context.createOscillator(); oscillator.frequency.value = 440 * 2 ** ((state.targetMidi - 69) / 12)
+      oscillator.connect(gain); gain.connect(output); oscillator.start()
+      const track = output.stream.getAudioTracks()[0], stop = track.stop.bind(track)
+      track.stop = () => { stop(); void context.close() }
+      return output.stream
+    } })
+  })
+  await page.goto('/')
+  await page.getByRole('button', { name: /彈吉他.*麥克風作答/ }).click()
+  await page.getByLabel('這次練什麼').selectOption('notes')
+  await startPractice(page)
+  const prompt = await page.locator('.question-prompt').textContent()
+  const match = /第 (\d) 弦(?:第 (\d+) 格|空弦)/.exec(prompt!)!
+  const midi = [40,45,50,55,59,64][6 - Number(match[1])] + Number(match[2] ?? 0)
+  await page.evaluate(value => { (window as unknown as { targetMidi: number }).targetMidi = value }, midi)
+  await page.getByRole('button', { name: '開始收音', exact: true }).click()
+  await expect.poll(async () => (await attempts(page)).filter(a => a.result === 'correct').length).toBe(1)
+  await expect.poll(() => page.getByRole('meter', { name: '麥克風輸入音量' }).evaluate(e => (e as HTMLMeterElement).value)).toBeGreaterThan(0)
+  await expect(page.locator('.play-listen strong')).toContainText('聽到')
+  await page.screenshot({ path: info.outputPath('quiet-microphone.png'), fullPage: true })
+  await page.getByRole('button', { name: '暫停', exact: true }).click()
+})
+
+test('denied microphone permission is an actionable error rather than a false listening state', async ({ page }) => {
+  await page.addInitScript(() => {
+    Object.defineProperty(navigator.mediaDevices, 'getUserMedia', { value: async () => { throw new DOMException('Denied', 'NotAllowedError') } })
+  })
+  await page.goto('/')
+  await page.getByRole('button', { name: /彈吉他.*麥克風作答/ }).click()
+  await page.getByLabel('這次練什麼').selectOption('notes')
+  await startPractice(page)
+  await page.getByRole('button', { name: '開始收音', exact: true }).click()
+  await expect(page.getByText('收音未啟動', { exact: true })).toBeVisible()
+  await expect(page.getByText(/網站尚未取得麥克風權限/)).toBeVisible()
+  await expect(page.getByRole('button', { name: '重新收音', exact: true })).toBeVisible()
+  expect(await attempts(page)).toHaveLength(0)
 })
