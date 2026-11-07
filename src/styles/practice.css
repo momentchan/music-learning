@@ -32,3 +32,12 @@ button:focus-visible,select:focus-visible,a:focus-visible{outline:2px solid var(
   .practice-board .whole-board .shared-fretboard.is-playing{min-width:0;width:100%;max-width:100%}
   .practice-board .local-board,.practice-board .board-overview,.practice-board .fret-window-options,.practice-board .board-caption{display:none}
 }
+
+
+/* Microphone answers need one continuous reference neck, not touch-sized fret pages. */
+.practice-board.complete-board .whole-board{display:block;overflow-x:visible;min-width:0;max-width:100%}
+.practice-board.complete-board .whole-board .shared-fretboard.is-playing{min-width:0;width:100%;max-width:100%}
+@media(max-width:700px){
+  .complete-board .svg-string-label,.complete-board .svg-fret-label,.complete-board .svg-note{font-size:36px}
+  .complete-board .fret-cell>circle{r:24px}
+}

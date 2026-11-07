@@ -71,7 +71,8 @@ test('portrait practice has large targets, no swipe answer, correct keyboard map
   await context.close()
 })
 
-test('instrument answers verify the actual octave without granting position recall, and release the microphone', async ({ page }, info) => {
+for (const width of [320, 390, 430, 1280]) test(`instrument answers at ${width}px keep the whole neck, verify octave and release the microphone`, async ({ page }, info) => {
+  await page.setViewportSize({ width, height: 844 })
   await page.addInitScript(() => {
     const state = window as Window & { micCalls: number; stopped: boolean; fakePluck: (midi: number, seconds?: number) => void }
     state.micCalls = 0; state.stopped = false
@@ -94,6 +95,12 @@ test('instrument answers verify the actual octave without granting position reca
   await page.getByLabel('這次練什麼').selectOption('notes')
   await startPractice(page)
   await expect(page.locator('.question-prompt')).toContainText('並彈出來')
+  await expect(page.locator('.question-card .svg-fret-label')).toHaveText(Array.from({ length: 13 }, (_, i) => String(i)))
+  await expect(page.getByRole('group', { name: '顯示把位' })).toHaveCount(0)
+  await expect(page.locator('.question-card .board-overview, .question-card .board-view-toggle')).toHaveCount(0)
+  const fit = await page.locator('.complete-board .whole-board').evaluate(el => [el.scrollWidth, el.clientWidth])
+  expect(fit[0]).toBeLessThanOrEqual(fit[1] + 1)
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
   await expect(page.locator('.question-prompt')).not.toContainText(/第 \d+ (格|弦)/)
   await expect(page.locator('.question-card [data-target-string="true"]')).toHaveCount(1)
   await expect(page.locator('.question-card .svg-note')).toHaveCount(0)
@@ -126,6 +133,12 @@ test('instrument answers verify the actual octave without granting position reca
   await expect.poll(() => page.evaluate(() => (window as unknown as { stopped: boolean }).stopped)).toBe(true)
   await page.getByRole('button', { name: '繼續練習', exact: true }).click()
   await expect.poll(() => page.evaluate(() => (window as unknown as { micCalls: number }).micCalls)).toBe(2)
+  if (width < 700) {
+    await page.getByRole('button', { name: '改用點指板', exact: true }).click()
+    await expect(page.locator('.local-board .svg-fret-label')).toHaveCount(4)
+    await expect(page.getByRole('group', { name: '顯示把位' })).toBeVisible()
+    await expect(page.locator('.play-listen')).toHaveCount(0)
+  }
   await page.getByRole('button', { name: '結束這次', exact: true }).click()
   await expect(page.locator('.play-listen')).toHaveCount(0)
 })

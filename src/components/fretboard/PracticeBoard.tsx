@@ -6,7 +6,7 @@ import { FRET_WINDOWS } from './projection'
 const LOCAL_BOARD_QUERY = '(max-width: 700px) and (orientation: portrait), (max-width: 700px) and (min-height: 521px)'
 
 /** A small overview preserves orientation; only the full-size local neck accepts answers. */
-export function PracticeBoard({ focusFret, ...props }: Omit<FretboardProps, 'orientation'> & { focusFret?: number }) {
+export function PracticeBoard({ focusFret, fullNeck = false, ...props }: Omit<FretboardProps, 'orientation'> & { focusFret?: number; fullNeck?: boolean }) {
   const narrow = useSyncExternalStore(listener => {
     const query = window.matchMedia(LOCAL_BOARD_QUERY)
     query.addEventListener('change', listener)
@@ -25,6 +25,9 @@ export function PracticeBoard({ focusFret, ...props }: Omit<FretboardProps, 'ori
   const localMin = Math.max(props.minFret ?? 0, min)
   const localMax = Math.min(limit, max)
   const validRange = localMin <= localMax
+  if (fullNeck) return <div className="practice-board complete-board">
+    <div className="whole-board"><Fretboard {...props} minFret={0} maxFret={12} selectableRange={[lo, hi]} orientation="playing"/></div>
+  </div>
   return <div className={`practice-board ${whole ? 'show-whole' : ''}`}>
     <div className="board-caption"><span>{props.leftHanded ? '左手琴' : ''}</span><button type="button" className="text-button board-view-toggle" onClick={() => setWhole(!whole)}>{whole ? '局部把位' : '全指板'}</button></div>
     <div className="board-overview" role="img" aria-label={`全指板定位：目前第 ${localMin}–${localMax} 格`}>

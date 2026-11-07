@@ -34,6 +34,8 @@ Microphone input now shows an independent volume meter and detected note. Starti
 
 ## Progressive finding and complete intervals
 
+Microphone finding uses one fitted 0–12 fret reference neck on phones and computers, without fret-window buttons, a miniature map, or view switching. This keeps all possible positions visible while both hands hold the guitar. Portrait reference labels are enlarged for reading. Local windows remain for touch answers and return if the learner switches to tapping.
+
 Finding notes remains one topic with no additional mode selector. New notes start across strings 6 → 1, then repeat with shuffled strings. Each string needs an independent correct answer; hints, immediate retries and skipped positions do not complete that step. Unresolved strings return before the next step. The note order is C, G, D, A, E, B, F, then F♯, C♯, G♯, D♯, A♯. Completed notes gradually join review, with recent misses and overdue positions prioritized. Phone and guitar histories steer their own practice sequence; pitch answers still never grant position mastery. The serialized questions and history preserve the route across reloads and sessions.
 
 Each question requests an exact octave. Open strings appear first and their fret-12 octaves appear in the shuffled round, covering all positions from fret 0 to 12 across the full sequence. After the twelve notes, practice continues with mixed review.
@@ -42,7 +44,7 @@ Interval shapes now cover m2, M2, m3, M3, P4, A4 (tritone), P5, m6, M6, m7, M7 a
 
 ## Current release: pocket practice and at-the-guitar practice
 
-Choose **通勤練習** or **彈吉他**, then pick note locations, note naming, adjacent-string intervals, or chord tones. On portrait phones, answer on a large local fret window; rotating to landscape fits all frets 0–12 within the available width, and rotating back restores the local window; on the computer, use the full player-view neck. Context is suggested by screen size only on first use and stays under your control.
+Choose **通勤練習** or **彈吉他**, then pick note locations, note naming, adjacent-string intervals, or chord tones. For tapping on portrait phones, answer on a large local fret window; rotating to landscape fits all frets 0–12 within the available width, and rotating back restores the local window; on the computer, use the full player-view neck. Context is suggested by screen size only on first use and stays under your control.
 
 Choose **彈吉他** and start practice: microphone input starts automatically, with browser permission on first use. Finding-note questions highlight the target string and ask for a note (including its octave), without showing the fret. Hints reveal the position and are recorded as assisted recall. Played answers check the exact pitch, including the octave. The app cannot infer the string/fret from that sound: confirm the physical position yourself. Naming questions still require a note name. Microphone results are stored separately and never promote position or naming recall.
 

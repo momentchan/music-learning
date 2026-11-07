@@ -79,7 +79,7 @@ export function QuestionView({ question, grade, response, onSubmit, inputMode, h
     }
     return <div className="question playing">
       <h2 className="question-prompt">{question.prompt}</h2>
-      <PracticeBoard focusFret={hinted || answered ? (grade?.correctPositions ?? locateTargets(question))[0]?.fret : question.reference?.fret} highlightedString={question.string} leftHanded={leftHanded} tuning={question.tuning} minFret={question.minFret} maxFret={question.maxFret}
+      <PracticeBoard fullNeck={byEar} focusFret={hinted || answered ? (grade?.correctPositions ?? locateTargets(question))[0]?.fret : question.reference?.fret} highlightedString={question.string} leftHanded={leftHanded} tuning={question.tuning} minFret={question.minFret} maxFret={question.maxFret}
         marks={marks} onSelect={byEar ? undefined : (string, fret, inputMethod) => { if (!answered) onSubmit({ kind: 'fret-locate', string, fret, inputMethod }) }} disabled={answered || byEar}
         label={byEar ? `目標第 ${question.string ?? '任意'} 弦，找出指定音並彈奏，作答前不顯示答案位置` : '可點選的指板，上方第 1 弦、下方第 6 弦，點一下送出'}/>
       {!answered && <button type="button" className="text-button" disabled={hinted} onClick={onHint}>{hinted ? '已顯示提示' : '提示位置'}</button>}
