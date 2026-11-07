@@ -1,3 +1,5 @@
+import { scaleNotes } from '../../music-theory/keys'
+import { parseNote, noteLabel } from '../../music-theory/notes'
 import { playedQuestion } from '../../exercise-engine/playedAnswer'
 import { PracticeBoard } from '../../components/fretboard/PracticeBoard'
 import { ChordDiagram } from '../../components/diagram/ChordDiagram'
@@ -79,6 +81,7 @@ export function QuestionView({ question, grade, response, onSubmit, inputMode, h
     }
     return <div className="question playing">
       <h2 className="question-prompt">{question.prompt}</h2>
+      {question.scale?.intro && <p className="helper">主音是第 1 級，沿音階依序往上數。</p>}
       <PracticeBoard fullNeck={byEar} focusFret={hinted || answered ? (grade?.correctPositions ?? locateTargets(question))[0]?.fret : question.reference?.fret} highlightedString={question.string} leftHanded={leftHanded} tuning={question.tuning} minFret={question.minFret} maxFret={question.maxFret}
         marks={marks} onSelect={byEar ? undefined : (string, fret, inputMethod) => { if (!answered) onSubmit({ kind: 'fret-locate', string, fret, inputMethod }) }} disabled={answered || byEar}
         label={byEar ? `目標第 ${question.string ?? '任意'} 弦，找出指定音並彈奏，作答前不顯示答案位置` : '可點選的指板，上方第 1 弦、下方第 6 弦，點一下送出'}/>
@@ -90,10 +93,11 @@ export function QuestionView({ question, grade, response, onSubmit, inputMode, h
   if (question.kind === 'construct') {
     return <div className="question">
       <h2 className="question-prompt">{question.prompt}</h2>
+      {question.scale && !answered && <><button type="button" className="text-button" disabled={hinted} onClick={onHint}>提示音階</button>{hinted && <p className="helper">{scaleNotes(parseNote(question.scale.tonic), 'major').map((n, i) => `${i + 1}=${noteLabel(n)}`).join('、')}</p>}</>}
       {question.given.length > 1 && <p className="given-notes">{question.given.map(n => n === '_' ? '＿' : displayNote(n)).join('  ')}</p>}
       {answered && response?.kind === 'construct'
         ? <p className="helper">你的答案：{response.notes.map(displayNote).join(' ')}</p>
-        : <NotePicker autoSubmitSingle={question.templateId === 'interval.shapes.name'} key={question.id} slots={question.expected.length} onSubmit={notes => onSubmit({ kind: 'construct', notes })}/>}
+        : <NotePicker autoSubmitSingle={question.templateId === 'interval.shapes.name' || !!question.scale} key={question.id} slots={question.expected.length} onSubmit={notes => onSubmit({ kind: 'construct', notes })}/>}
     </div>
   }
 

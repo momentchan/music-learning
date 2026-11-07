@@ -1,3 +1,4 @@
+import { scalePractice } from './templates/scalePractice'
 import { chordTones, positionWindow } from './templates/applied'
 import { fretAccidentals, fretNaturalsAll, fretNaturalsLow, fretOctaves, fretOpen, intervalShapes } from './templates/fretboard'
 import { chordDiagram, chordOpen, earBasic, rhythmPulse, rhythmStrum } from './templates/practical'
@@ -6,7 +7,7 @@ import type { Difficulty, ExerciseTemplate, Question } from './types'
 
 export const TEMPLATES: readonly ExerciseTemplate[] = [
   chordTones, positionWindow,
-  ...fretOpen, ...fretNaturalsLow, ...fretNaturalsAll, ...fretAccidentals, ...fretOctaves, ...intervalShapes,
+  ...fretOpen, ...fretNaturalsLow, ...fretNaturalsAll, ...fretAccidentals, ...fretOctaves, ...intervalShapes, ...scalePractice,
   ...intervalBasics, ...triadBasic, ...scaleMajor, ...keyDiatonic, ...harmonyBasic,
   ...chordDiagram, ...chordOpen, ...rhythmPulse, ...rhythmStrum, ...earBasic,
 ]

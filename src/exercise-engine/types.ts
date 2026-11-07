@@ -17,6 +17,7 @@ interface QuestionBase {
   evidenceLevel: EvidenceLevel
   prompt: string
   interval?: { name: string; root: string; target: string; rootMidi: number; targetMidi: number }
+  scale?: { tonic: string; mode: 'major'; degree: number; target: string; rootMidi: number; targetMidi: number; intro?: boolean }
   /** Review items this question gives evidence for. */
   reviewItemIds: string[]
   /** Explanation shown after answering (what is true and why). */

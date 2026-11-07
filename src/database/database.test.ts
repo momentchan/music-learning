@@ -252,3 +252,17 @@ it('deduplicates concurrent logical bridge tasks and completes the existing task
   await repo.completeBridge('unused-new-id', { id: 'report', nodeId: 'chord.open', bridgeTaskId: 'play-c', rating: 1, verified: false, timestamp: T0 + 1000 })
   expect(await repo.listBridgeQueue()).toHaveLength(0)
 })
+
+it('round-trips the independent scale focus and stored scale questions', async () => {
+  const { buildGuidedSession } = await import('../learning/sessions')
+  const source = new DexieLearningRepository(new GuitarLabDB(freshName()))
+  await source.savePreferences({ ...await source.getPreferences(), practiceFocus: 'scales' })
+  const plan = buildGuidedSession({ seed: 8, now: T0, audio: false, reviews: new Map(), mastery: new Map(), preference: 'auto', focus: 'scales' })
+  await source.saveSession({ ...session('scales'), plannedItems: plan, settings: { practiceFocus: 'scales' } })
+  const backup = await source.exportAll()
+  expect(validateBackup(backup).ok).toBe(true)
+  const target = new DexieLearningRepository(new GuitarLabDB(freshName()))
+  await target.importBackup(backup, 'replace')
+  expect((await target.getPreferences()).practiceFocus).toBe('scales')
+  expect((await target.getSession('scales'))!.plannedItems).toEqual(plan)
+})

@@ -17,7 +17,7 @@ export function ProgressScreen() {
   const [error, setError] = useState('')
   async function strengthen(itemId: string) {
     try {
-      await learning.savePreferences({ practiceFocus: itemId.startsWith('chord.tone.') ? 'chord-tones' : itemId.startsWith('interval.shape.') ? 'intervals' : 'notes' })
+      await learning.savePreferences({ practiceFocus: itemId.startsWith('chord.tone.') ? 'chord-tones' : itemId.startsWith('interval.') ? 'intervals' : itemId.startsWith('scale.degree.') ? 'scales' : 'notes' })
       navigate(`/session/${await useLearning.getState().startGuided(audioIsOn())}`)
     } catch { setError('無法開始加強練習，請再試一次。') }
   }

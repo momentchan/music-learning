@@ -87,7 +87,7 @@ export interface SavedProgression { id: string; name: string; key: string; chord
 
 export interface PathwayProgress { pathwayId: string; completedNodeIds: string[]; updatedAt: number }
 
-export type PracticeFocus = 'notes' | 'naming' | 'positions' | 'intervals' | 'chord-tones'
+export type PracticeFocus = 'notes' | 'naming' | 'positions' | 'intervals' | 'scales' | 'chord-tones'
 
 export interface Preferences {
   practiceFocus: PracticeFocus

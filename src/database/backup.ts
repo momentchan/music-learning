@@ -105,7 +105,7 @@ export function validateBackup(json: unknown, now = Date.now()): ValidationResul
     if (!isObj(r) || !isId(r.id) || JSON.stringify(r).length > MAX_PAYLOAD_CHARS) return fail(`settings[${i}] 不正確。`)
     if (r.id === 'preferences') {
       if (!isObj(r.value)) return fail(`settings[${i}] 偏好格式不正確。`)
-      const enums: Record<string, unknown[]> = { practiceContext: ['pocket', 'instrument'], practiceFocus: ['notes', 'naming', 'positions', 'intervals', 'chord-tones'], answerInput: ['tap', 'play'], advancePolicy: ['auto', 'manual'], practiceLayout: ['vertical', 'horizontal'] }
+      const enums: Record<string, unknown[]> = { practiceContext: ['pocket', 'instrument'], practiceFocus: ['notes', 'naming', 'positions', 'intervals', 'scales', 'chord-tones'], answerInput: ['tap', 'play'], advancePolicy: ['auto', 'manual'], practiceLayout: ['vertical', 'horizontal'] }
       for (const [key, choices] of Object.entries(enums)) if (r.value[key] !== undefined && !choices.includes(r.value[key])) fail(`settings[${i}] ${key} 不正確。`)
     }
   })

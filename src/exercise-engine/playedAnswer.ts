@@ -26,7 +26,8 @@ export function responseFromPlayedNote(_question: unknown, midi: number): Respon
 export function validatePlayedNote(question: FretLocateQuestion, response: Extract<Response, { kind: 'played-note' }>): Grade {
   const correct = question.targetMidi === undefined ? mod12(response.midi) === question.targetPc : response.midi === question.targetMidi
   const name = (midi: number) => `${PC_SHARP[mod12(midi)]}${Math.floor(midi / 12) - 1}`
-  const target = question.interval ? `${displayNote(question.interval.target)}${octaveOf(question.interval.targetMidi - parseNote(question.interval.target).acc)}` : question.targetMidi === undefined ? question.targetLabel : name(question.targetMidi)
+  const written = question.interval ?? question.scale
+  const target = written ? `${displayNote(written.target)}${octaveOf(written.targetMidi - parseNote(written.target).acc)}` : question.targetMidi === undefined ? question.targetLabel : name(question.targetMidi)
   return {
     result: correct ? 'correct' : 'incorrect', itemResults: {},
     verificationScope: question.targetMidi === undefined ? 'pitchClass' : 'exactPitch',

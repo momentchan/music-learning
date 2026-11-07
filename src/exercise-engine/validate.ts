@@ -93,7 +93,7 @@ function validateLocate(q: FretLocateQuestion, r: { string: number; fret: number
       ? `差一格。跨過第 3 弦（G）到第 2 弦（B）時，因為這兩條弦相差大三度（其他相鄰弦是完全四度），形狀要往${sameStringTarget.fret > r.fret ? '高' : '低'}把位移一格。`
       : `差一格：你點的是 ${responseText}，正確位置在${positionText(sameStringTarget.string, sameStringTarget.fret)}。`
   }
-  if (q.interval) feedback = errorClass === 'wrong-string' ? '音名對了，請在標示的目標弦作答。' : errorClass === 'wrong-octave' ? `八度不同：你選的是 ${midiName(midi)}。` : `你選的是 ${midiName(midi)}${errorClass === 'off-by-one' || errorClass === 'gb-offset' ? '，差一格' : ''}。`
+  if (q.interval || q.scale) feedback = errorClass === 'wrong-string' ? '音名對了，請在標示的目標弦作答。' : errorClass === 'wrong-octave' ? `八度不同：你選的是 ${midiName(midi)}。` : `你選的是 ${midiName(midi)}${errorClass === 'off-by-one' || errorClass === 'gb-offset' ? '，差一格' : ''}。`
   return { result: 'incorrect', itemResults: all(q, false), errorClass, feedback, expectedText, responseText, correctPositions: targets }
 }
 
@@ -109,7 +109,7 @@ function validateConstruct(q: ConstructQuestion, r: { notes: string[] }): Grade 
     ? given.every((n, i) => sameSpelling(n, expected[i]))
     : expected.every(e => given.some(n => sameSpelling(n, e))))
   const itemResults: Record<string, boolean> = {}
-  for (const id of q.reviewItemIds) if (id !== q.spellingItemId) itemResults[id] = q.interval ? spellingOk : pitchOk
+  for (const id of q.reviewItemIds) if (id !== q.spellingItemId) itemResults[id] = q.interval || q.scale ? spellingOk : pitchOk
   if (pitchOk) itemResults[q.spellingItemId] = spellingOk
   const expectedText = expected.map(noteLabel).join(' ')
   const responseText = given.map(noteLabel).join(' ') || '（未作答）'

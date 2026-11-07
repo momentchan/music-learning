@@ -1,3 +1,4 @@
+import { buildScalePractice } from './scalePractice'
 /** Pure session planning (spec §3.1, §9.2). Questions are generated up front and stored, so resume replays them exactly. */
 import { nodeById } from '../curriculum/nodes'
 import { templatesForNode } from '../exercise-engine/registry'
@@ -27,8 +28,8 @@ const usable = (t: ExerciseTemplate, audio: boolean) => audio || !t.requiresAudi
 const DEGREE_NODES = ['scale.major', 'key.diatonic']
 
 /** A degree question that also asks for a string and fret. That mix is not used. */
-export function isDegreePositionQuestion(question: { kind: string; nodeId: string }): boolean {
-  return question.kind === 'fret-locate' && DEGREE_NODES.includes(question.nodeId)
+export function isDegreePositionQuestion(question: { kind: string; nodeId: string; scale?: unknown }): boolean {
+  return question.kind === 'fret-locate' && DEGREE_NODES.includes(question.nodeId) && !question.scale
 }
 
 /** Drop stored "find this degree on this string" items so an older session stops mixing the two skills. */
@@ -149,9 +150,10 @@ export function intervalPracticeDifficulty(options: GuidedOptions): Difficulty {
  * The batch keeps going until the learner leaves. The guitar task is queued, not played here.
  */
 export function buildGuidedSession(options: GuidedOptions): PlannedItem[] {
+  if (options.focus === 'scales') return buildScalePractice(options)
   if (options.focus && options.focus !== 'notes') {
     const focus = options.focus
-    const ids: Record<Exclude<PracticeFocus, 'notes'>, string[]> = {
+    const ids: Record<Exclude<PracticeFocus, 'notes' | 'scales'>, string[]> = {
       naming: ['fret.naturals.all.identify'], positions: ['fret.naturals.all.window'],
       intervals: ['interval.shapes.locate', 'interval.shapes.name'], 'chord-tones': ['chord.open.tones'],
     }
@@ -189,5 +191,6 @@ export function recheckFor(question: Extract<PlannedItem, { kind: 'question' }>[
     recheck.targetMidi = question.targetMidi
     recheck.prompt = question.prompt
   }
+  if (recheck.scale) recheck.scale.intro = false
   return { kind: 'question', question: recheck, reason: '再確認一次', recheckOf: question.id }
 }

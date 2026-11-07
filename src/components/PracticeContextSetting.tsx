@@ -11,7 +11,7 @@ export function PracticeContextSetting() {
     </div>
     <label className="focus-setting">這次練什麼
       <select disabled={!loaded} value={preferences.practiceFocus === 'positions' ? 'notes' : preferences.practiceFocus} onChange={e => void savePreferences({ practiceFocus: e.target.value as PracticeFocus })}>
-        <option value="notes">找音</option><option value="naming">說出音名</option><option value="intervals">音程</option><option value="chord-tones">和弦音</option>
+        <option value="notes">找音</option><option value="naming">說出音名</option><option value="intervals">音程</option><option value="scales">音階</option><option value="chord-tones">和弦音</option>
       </select>
     </label>
   </div>

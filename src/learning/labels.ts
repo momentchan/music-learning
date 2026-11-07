@@ -19,6 +19,7 @@ export function itemLabel(itemId: string): string {
     if (itemId.startsWith('interval.shape.')) return `${intervalLabel(p[2])} 形狀${p[3] === 'gb' ? '（跨 G–B 弦）' : ''}`
     if (itemId.startsWith('interval.')) return intervalLabel(p[1])
     if (itemId.startsWith('triad.')) return TRIAD[p[1]] ?? itemId
+    if (itemId.startsWith('scale.degree.')) return `${displayNote(p[2])} 大調第 ${p[3]} 級${p[4] === 'name' ? '音名' : '位置'}`
     if (itemId.startsWith('scale.major.')) return `${displayNote(p[2])} 大調音階`
     if (itemId.startsWith('key.sig.')) return `${displayNote(p[2])} 大調調號`
     if (itemId.startsWith('key.')) return `${displayNote(p[1])} 大調第 ${p[2]} 級`
