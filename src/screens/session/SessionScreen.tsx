@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { navigate } from '../../app/router'
 import { nodeById } from '../../curriculum/nodes'
 import { repository } from '../../database/repository'
+import { naturalNoteConfirmation } from '../../exercise-engine/answerNote'
 import type { Grade, Question, Response } from '../../exercise-engine/types'
 import { validate } from '../../exercise-engine/validate'
 import { t } from '../../i18n/zh-TW'
@@ -29,6 +30,8 @@ export function SessionScreen({ sessionId }: { sessionId: string }) {
   const [boxChanges, setBoxChanges] = useState({ promoted: 0, demoted: 0 })
   const shownAt = useRef(performance.now())
   const busy = useRef(false)
+  // The confirmation pluck may still be loading when the next question appears. Do not cancel it.
+  const confirming = useRef(false)
   const advanceRef = useRef<() => void>(() => {})
   const learning = useLearning()
   const { play, stop } = useAudioUi()
@@ -78,6 +81,10 @@ export function SessionScreen({ sessionId }: { sessionId: string }) {
     if (busy.current || !session) return
     busy.current = true
     const grade = validate(question, response)
+    // Start from the tap, before any await, so the browser still treats it as a user gesture.
+    const confirmation = naturalNoteConfirmation(question, response, grade)
+    confirming.current = !!confirmation && audioIsOn()
+    if (confirming.current && confirmation) void play(confirmation)
     const isRetry = !!retry
     const now = Date.now()
     const attempt: ExerciseAttempt = {
@@ -124,7 +131,8 @@ export function SessionScreen({ sessionId }: { sessionId: string }) {
     const cursor = Math.max(session.cursor, view + 1)
     const next = { ...session, cursor, updatedAt: Date.now(), outcomes: patch?.outcome ? [...session.outcomes.filter(o => o.index !== view), patch.outcome] : session.outcomes }
     setAnswer(null)
-    stop()
+    if (confirming.current) confirming.current = false
+    else stop()
     if (cursor >= session.plannedItems.length && session.mode === 'guided') {
       try {
         const extended = await learning.extendGuided(next)
