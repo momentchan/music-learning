@@ -14,11 +14,15 @@ interface Props {
   onFallback?: () => void
 }
 type MicState = 'off' | 'requesting' | 'listening' | 'error'
+// Device IDs belong to this browser, not to exported or synced learning preferences.
+const INPUT_KEY = 'guitar-lab-audio-input'
+const savedInput = () => { try { return localStorage.getItem(INPUT_KEY) || '' } catch { return '' } }
+const rememberInput = (id: string) => { try { if (id) localStorage.setItem(INPUT_KEY, id); else localStorage.removeItem(INPUT_KEY) } catch { /* Listening still works without storage. */ } }
 const noteName = (midi: number) => `${['C','C♯','D','D♯','E','F','F♯','G','G♯','A','A♯','B'][midi % 12]}${Math.floor(midi / 12) - 1}`
 const describeError = (error: unknown) => {
   const name = error instanceof Error ? error.name : ''
   if (name === 'NotAllowedError' || name === 'SecurityError') return '網站尚未取得麥克風權限。請在網址列的網站權限允許麥克風，再按重新收音。'
-  if (name === 'NotFoundError' || name === 'OverconstrainedError') return '找不到選定的麥克風，請改選電腦內建麥克風。'
+  if (name === 'NotFoundError' || name === 'OverconstrainedError') return '找不到音訊輸入裝置，請接上裝置後重新收音。'
   if (name === 'NotReadableError') return '麥克風目前無法讀取，可能被其他程式占用。請關閉其他收音程式再試。'
   return '收音無法啟動，請確認瀏覽器與系統的麥克風權限，再按重新收音。'
 }
@@ -30,9 +34,10 @@ export function PlayListener({ autoStart = false, disabled, targetId, paused, on
   const [status, setStatus] = useState('按開始收音，允許麥克風後就能彈奏。')
   const [heard, setHeard] = useState('')
   const [level, setLevel] = useState(0)
-  const [deviceName, setDeviceName] = useState('瀏覽器預設麥克風')
+  const [deviceName, setDeviceName] = useState('系統預設輸入')
   const [devices, setDevices] = useState<MediaDeviceInfo[]>([])
-  const [deviceId, setDeviceId] = useState('')
+  const [deviceId, setDeviceId] = useState(savedInput)
+  const [deviceNotice, setDeviceNotice] = useState('')
   const [restart, setRestart] = useState(0)
   const gate = useRef(new NoteGate())
   const latest = useRef({ disabled, onNote, onPitch })
@@ -49,6 +54,30 @@ export function PlayListener({ autoStart = false, disabled, targetId, paused, on
     if (!enabled || paused) return
     let stopped = false, frame = 0, stream: MediaStream | null = null
     let source: MediaStreamAudioSourceNode | undefined, analyser: AnalyserNode | undefined
+    let track: MediaStreamTrack | undefined
+    const useDefault = () => {
+      if (stopped) return
+      rememberInput(''); setDeviceId('')
+      setDeviceNotice('原輸入裝置已無法使用，已切回跟隨系統。')
+    }
+    const refreshDevices = async () => {
+      try {
+        const all = await navigator.mediaDevices.enumerateDevices()
+        if (stopped) return
+        setDevices(all.filter(d => d.kind === 'audioinput'))
+        if (deviceId && stream && !all.some(d => d.kind === 'audioinput' && d.deviceId === deviceId)) useDefault()
+      } catch { /* Enumeration may be unavailable even when capture works. */ }
+    }
+    const deviceChanged = () => {
+      void refreshDevices()
+      if (!deviceId && stream) setRestart(n => n + 1)
+    }
+    const ended = () => {
+      if (stopped) return
+      if (deviceId) useDefault()
+      else setRestart(n => n + 1)
+    }
+    navigator.mediaDevices?.addEventListener('devicechange', deviceChanged)
     let lastFrame = 0, lastUi = 0, lastStatus = '', quietSince = performance.now()
     const update = (s: string) => { if (lastStatus !== s) { lastStatus = s; setStatus(s) } }
     setPhase('requesting'); setLevel(0); setHeard('')
@@ -67,9 +96,10 @@ export function PlayListener({ autoStart = false, disabled, targetId, paused, on
         const context = listeningContext()
         await context.resume()
         if (stopped) return
-        const track = stream.getAudioTracks()[0]
-        setDeviceName(track?.label || '瀏覽器預設麥克風')
-        void navigator.mediaDevices.enumerateDevices().then(all => { if (!stopped) setDevices(all.filter(d => d.kind === 'audioinput')) }).catch(() => undefined)
+        track = stream.getAudioTracks()[0]
+        track?.addEventListener('ended', ended)
+        setDeviceName(track?.label || '系統預設輸入')
+        void refreshDevices()
         source = context.createMediaStreamSource(stream)
         analyser = context.createAnalyser(); analyser.fftSize = 4096
         source.connect(analyser)
@@ -93,7 +123,7 @@ export function PlayListener({ autoStart = false, disabled, targetId, paused, on
           if (latest.current.disabled) return
           if (context.state !== 'running') { update('音訊處於暫停狀態，請按重新收音。'); return }
           if (rms < MIN_PITCH_RMS) {
-            if (now - quietSince > 3000) update('輸入音量不足。請靠近電腦麥克風彈單音；若音量條完全不動，請檢查輸入裝置與系統權限。')
+            if (now - quietSince > 3000) update('未收到足夠訊號，請檢查輸入來源與音量。')
             else update('請彈一個單音。')
           } else {
             quietSince = now
@@ -111,17 +141,19 @@ export function PlayListener({ autoStart = false, disabled, targetId, paused, on
         }
         frame = requestAnimationFrame(tick)
       } catch (error) {
+        if (!stopped && deviceId && error instanceof Error && ['NotFoundError', 'OverconstrainedError'].includes(error.name)) { useDefault(); return }
         if (!stopped) { setPhase('error'); setLevel(0); setStatus(describeError(error)); stream?.getTracks().forEach(t => t.stop()) }
       }
     })()
-    return () => { stopped = true; cancelAnimationFrame(frame); source?.disconnect(); analyser?.disconnect(); stream?.getTracks().forEach(t => t.stop()) }
+    return () => { stopped = true; navigator.mediaDevices?.removeEventListener('devicechange', deviceChanged); track?.removeEventListener('ended', ended); cancelAnimationFrame(frame); source?.disconnect(); analyser?.disconnect(); stream?.getTracks().forEach(t => t.stop()) }
   }, [enabled, paused, deviceId, restart])
   const start = () => { resumeListening(); setEnabled(true); setRestart(n => n + 1) }
   return <section className="play-listen" aria-label="吉他收音">
     <div role="status"><strong>{phase === 'error' ? '收音未啟動' : heard || (phase === 'listening' ? '麥克風已連線' : phase === 'requesting' ? '等待麥克風權限' : paused ? '已暫停' : '收音已停止')}</strong>{enabled && <p>{status}</p>}</div>
     <label className="mic-level-label">輸入音量<meter aria-label="麥克風輸入音量" min="0" max="100" value={level}/></label>
-    {enabled && <p className="helper mic-device">輸入：{deviceName}</p>}
-    {devices.filter(d => d.deviceId !== 'default' && d.deviceId !== 'communications').length > 1 && <label>輸入麥克風<select aria-label="輸入麥克風" value={deviceId} onChange={e => { resumeListening(); setDeviceId(e.target.value) }}><option value="">瀏覽器預設</option>{devices.filter(d => d.deviceId !== 'default' && d.deviceId !== 'communications').map(d => <option key={d.deviceId} value={d.deviceId}>{d.label || '其他麥克風'}</option>)}</select></label>}
+    {enabled && phase === 'listening' && <p className="helper mic-device">輸入：{deviceName}</p>}
+    {deviceNotice && <p className="helper" role="status">{deviceNotice}</p>}
+    {(!!deviceId || devices.filter(d => d.deviceId !== 'default' && d.deviceId !== 'communications').length > 1) && <label>輸入來源<select aria-label="輸入來源" value={deviceId} onChange={e => { resumeListening(); rememberInput(e.target.value); setDeviceNotice(''); setDeviceId(e.target.value) }}><option value="">跟隨系統</option>{devices.filter(d => d.deviceId !== 'default' && d.deviceId !== 'communications').map(d => <option key={d.deviceId} value={d.deviceId}>{d.label || '其他輸入裝置'}</option>)}</select></label>}
     <div className="button-row">
       {!enabled || phase === 'error' ? <button className="primary-button" disabled={paused} onClick={start}>{phase === 'error' ? '重新收音' : '開始收音'}</button> : <><button className="secondary-button" onClick={() => { setEnabled(false); setPhase('off'); setLevel(0) }}>停止收音</button><button className="text-button" onClick={start}>重新收音</button></>}
       {onFallback && <button className="text-button" onClick={() => { setEnabled(false); setPhase('off'); onFallback() }}>改用點指板</button>}
