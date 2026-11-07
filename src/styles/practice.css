@@ -22,3 +22,13 @@ button:focus-visible,select:focus-visible,a:focus-visible{outline:2px solid var(
 /* One task per navigation entry; status messages are shown only when actionable. */
 .bottom-nav button{display:flex;align-items:center;justify-content:center;min-height:44px}.bottom-nav button small{font-size:14px}.practice-hub .practice-context-setting{margin-bottom:16px}.practice-hub .start-card{padding:22px}.practice-hub .field-title{margin-bottom:8px}.practice-other{display:flex;flex-wrap:wrap;gap:10px;margin:18px 0}.practice-tools-drawer,.course-catalog,.course-preview{margin:18px 0}.practice-tools-drawer>summary,.course-catalog>summary,.course-preview>summary,.mastery-method>summary{cursor:pointer;padding:12px 0;font-size:14px;color:var(--muted);min-height:44px}.practice-tools-drawer .practice-tools{margin-top:6px}.course-catalog .card{margin-top:14px}.board-caption:has(>span:empty){justify-content:flex-end}.board-caption:has(>span:empty) span{display:none}.mic-level-label{display:flex;gap:12px;align-items:center;font-size:12px;margin:12px 0}.mic-level-label meter{width:100%;height:16px;flex:1;accent-color:var(--accent)}.mic-device{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.play-listen strong{font-size:17px}.play-listen p{font-size:13px;margin:8px 0}.play-listen .button-row{gap:8px}.play-listen select{font-size:13px}.play-listen .text-button{font-size:12px}.mastery-method{margin-bottom:12px}.practice-hub .continue-card h2{font-size:18px}
 @media(max-width:700px){.bottom-nav button small{font-size:13px}.practice-hub .start-card{padding:18px}.practice-hub .context-options button{min-height:66px}.board-caption{margin:0}.practice-other .secondary-button{flex:1}.play-listen{padding:14px}}
+
+
+/* Fit the full neck after phone rotation, including the narrow browser viewport. */
+@media (orientation:landscape) and (max-height:520px){
+  .app-shell .content{padding-left:max(12px,env(safe-area-inset-left));padding-right:max(12px,env(safe-area-inset-right))}
+  .practice-board,.practice-board .whole-board{min-width:0;max-width:100%}
+  .practice-board .whole-board{display:block;overflow-x:visible}
+  .practice-board .whole-board .shared-fretboard.is-playing{min-width:0;width:100%;max-width:100%}
+  .practice-board .local-board,.practice-board .board-overview,.practice-board .fret-window-options,.practice-board .board-caption{display:none}
+}

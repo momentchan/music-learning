@@ -2,13 +2,16 @@ import { useEffect, useState, useSyncExternalStore } from 'react'
 import { Fretboard, type FretboardProps } from './Fretboard'
 import { FRET_WINDOWS } from './projection'
 
+// Short landscape screens show the complete neck; portrait keeps large local targets.
+const LOCAL_BOARD_QUERY = '(max-width: 700px) and (orientation: portrait), (max-width: 700px) and (min-height: 521px)'
+
 /** A small overview preserves orientation; only the full-size local neck accepts answers. */
 export function PracticeBoard({ focusFret, ...props }: Omit<FretboardProps, 'orientation'> & { focusFret?: number }) {
   const narrow = useSyncExternalStore(listener => {
-    const query = window.matchMedia('(max-width: 700px)')
+    const query = window.matchMedia(LOCAL_BOARD_QUERY)
     query.addEventListener('change', listener)
     return () => query.removeEventListener('change', listener)
-  }, () => window.matchMedia('(max-width: 700px)').matches, () => false)
+  }, () => window.matchMedia(LOCAL_BOARD_QUERY).matches, () => false)
   const lo = props.minFret ?? 0, hi = props.maxFret ?? 12
   const windows: readonly (readonly [number, number])[] = hi - lo <= 3 ? [[lo, hi]] : FRET_WINDOWS.filter(([a,b]) => b >= lo && a <= hi).map(([a,b]) => [Math.max(a, lo), Math.min(b, hi)] as const)
   const [range, setRange] = useState(() => focusFret == null ? 0 : Math.max(0, windows.findIndex(([a,b]) => a <= focusFret && focusFret <= b)))

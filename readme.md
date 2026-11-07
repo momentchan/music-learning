@@ -42,7 +42,7 @@ Interval shapes now cover m2, M2, m3, M3, P4, A4 (tritone), P5, m6, M6, m7, M7 a
 
 ## Current release: pocket practice and at-the-guitar practice
 
-Choose **通勤練習** or **彈吉他**, then pick note locations, note naming, adjacent-string intervals, or chord tones. On the phone, answer on a large local fret window; on the computer, use the full player-view neck. Context is suggested by screen size only on first use and stays under your control.
+Choose **通勤練習** or **彈吉他**, then pick note locations, note naming, adjacent-string intervals, or chord tones. On portrait phones, answer on a large local fret window; rotating to landscape fits all frets 0–12 within the available width, and rotating back restores the local window; on the computer, use the full player-view neck. Context is suggested by screen size only on first use and stays under your control.
 
 Choose **彈吉他** and start practice: microphone input starts automatically, with browser permission on first use. Finding-note questions highlight the target string and ask for a note (including its octave), without showing the fret. Hints reveal the position and are recorded as assisted recall. Played answers check the exact pitch, including the octave. The app cannot infer the string/fret from that sound: confirm the physical position yourself. Naming questions still require a note name. Microphone results are stored separately and never promote position or naming recall.
 

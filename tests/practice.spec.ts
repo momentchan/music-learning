@@ -256,3 +256,53 @@ test('phone interval practice keeps the reference root visible in its local wind
   await expect(page.locator('.local-board .svg-note')).toContainText('R')
   await expect(page.locator('.local-board .svg-fret-label')).toHaveCount(4)
 })
+
+
+for (const size of [{ width: 568, height: 320 }, { width: 844, height: 300 }, { width: 932, height: 430 }, { width: 1024, height: 390 }]) {
+  test(`phone rotation fits all frets at ${size.width}x${size.height} and restores portrait practice`, async ({ browser }, info) => {
+    // Browser controls can shorten landscape height without changing the phone's portrait width.
+    const portrait = { width: size.width === 844 ? 390 : size.height, height: size.width }
+    const context = await browser.newContext({ viewport: portrait, isMobile: true, hasTouch: true })
+    const page = await context.newPage()
+    await page.goto('/')
+    await page.getByRole('button', { name: /通勤練習.*點指板/ }).click()
+    await page.getByLabel('這次練什麼').selectOption('notes')
+    await startPractice(page)
+    await expect(page.locator('.local-board .svg-fret-label')).toHaveCount(4)
+    const prompt = await page.locator('.question-prompt').textContent()
+    await page.setViewportSize(size)
+    const board = page.locator('.whole-board svg.fretboard')
+    await expect(board).toBeVisible()
+    await expect(board.locator('.svg-fret-label')).toHaveText(Array.from({ length: 13 }, (_, i) => String(i)))
+    const bounds = await board.boundingBox()
+    const container = await page.locator('.whole-board').boundingBox()
+    expect(bounds!.width).toBeLessThanOrEqual(container!.width + 1)
+    expect(bounds!.x).toBeGreaterThanOrEqual(0)
+    expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(size.width)
+    for (const fret of [0, 12]) {
+      const cell = await board.locator(`[data-cell="1-${fret}"] rect`).first().boundingBox()
+      expect(cell!.x).toBeGreaterThanOrEqual(container!.x - 1)
+      expect(cell!.x + cell!.width).toBeLessThanOrEqual(container!.x + container!.width + 1)
+    }
+    const scroll = await page.locator('.whole-board').evaluate(el => [el.scrollWidth, el.clientWidth])
+    expect(scroll[0]).toBeLessThanOrEqual(scroll[1] + 1)
+    const scale = await board.evaluate(el => { const m = (el as SVGSVGElement).getScreenCTM()!; return [m.a, m.d] })
+    expect(scale[0]).toBeCloseTo(scale[1], 3)
+    expect(await attempts(page)).toHaveLength(0)
+    await board.scrollIntoViewIfNeeded()
+    await page.screenshot({ path: info.outputPath(`landscape-${size.width}.png`), fullPage: true })
+    await page.setViewportSize(portrait)
+    await expect(page.locator('.local-board .svg-fret-label')).toHaveCount(4)
+    await expect(page.locator('.question-prompt')).toHaveText(prompt!)
+    expect(await attempts(page)).toHaveLength(0)
+    await page.setViewportSize(size)
+    await board.locator('[data-cell="1-12"]').tap({ timeout: 5000 })
+    await expect.poll(async () => (await attempts(page)).length).toBe(1)
+    expect((await attempts(page))[0].response).toMatchObject({ string: 1, fret: 12 })
+    await page.goto('/lab/fretboard')
+    await expect(page.locator('.whole-board .svg-fret-label')).toHaveCount(13)
+    const overflow = await page.locator('.whole-board').evaluate(el => el.scrollWidth > el.clientWidth + 1)
+    expect(overflow).toBe(false)
+    await context.close()
+  })
+}
