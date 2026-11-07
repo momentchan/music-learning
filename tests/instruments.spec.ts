@@ -1,4 +1,6 @@
 import { expect, test, type Page } from '@playwright/test'
+import type { Question } from '../src/exercise-engine/types'
+import { locateTargets } from '../src/exercise-engine/validate'
 
 test.use({ actionTimeout: 10000 })
 
@@ -114,4 +116,57 @@ test('changing the global instrument updates an already-open playback tab in bot
   await tools(playback)
   await expectBank(playback, 'pluck', () => playback.locator('[data-cell="1-3"]').click())
   await playback.close()
+})
+
+
+async function currentQuestion(page: Page): Promise<Question> {
+  return page.evaluate(async () => {
+    const id = decodeURIComponent(location.pathname.split('/').pop()!)
+    const db = await new Promise<IDBDatabase>(resolve => { const r = indexedDB.open('guitar-lab'); r.onsuccess = () => resolve(r.result) })
+    const session = await new Promise<{ cursor: number; plannedItems: { question: Question }[] }>(resolve => { const r = db.transaction('sessions').objectStore('sessions').get(id); r.onsuccess = () => resolve(r.result) })
+    db.close(); return session.plannedItems[session.cursor].question
+  })
+}
+
+for (const instrument of ['pluck', 'keys'] as const) test(`accidentals have audible ${instrument} lookup and answer feedback in both contexts`, async ({ page }) => {
+  test.setTimeout(60000)
+  await traceInstruments(page)
+  await page.goto('/settings')
+  await page.getByLabel('樂器音色').selectOption(instrument)
+  await tools(page)
+  // C♯/D♭, D♯/E♭, F♯/G♭, G♯/A♭, A♯/B♭ on the first string.
+  for (const fret of [9, 11, 2, 4, 6]) await expectBank(page, instrument, () => page.locator(`[data-cell="1-${fret}"]`).click())
+  await home(page)
+  await page.getByRole('button', { name: /通勤練習.*點指板/ }).click()
+  await page.goto('/learn/fret.accidentals')
+  await page.getByRole('button', { name: '只做練習', exact: true }).click()
+  for (let i = 0; i < 2; i++) {
+    await expect(page.locator('.question-prompt')).toBeVisible()
+    const q = await currentQuestion(page)
+    const el = await page.locator('.question-prompt').elementHandle()
+    if (q.kind === 'fret-locate') {
+      const target = locateTargets(q)[0]
+      await expectBank(page, instrument, () => page.locator(`[data-cell="${target.string}-${target.fret}"]`).click())
+    } else if (q.kind === 'fret-identify') await expectBank(page, instrument, () => page.locator('.pitch-picker button').nth(q.answerPc).click())
+    else throw new Error(`Unexpected accidental question: ${q.kind}`)
+    await page.waitForFunction(node => !node?.isConnected, el)
+  }
+  await page.getByRole('button', { name: '結束這次', exact: true }).click()
+  await expect(page.locator('.summary-card')).toBeVisible()
+  await home(page)
+  await page.getByRole('button', { name: /彈吉他.*麥克風作答/ }).click()
+  await page.goto('/learn/fret.accidentals')
+  await page.getByRole('button', { name: '只做練習', exact: true }).click()
+  await expect(page.locator('.question-prompt')).toBeVisible()
+  await expect(page.locator('.practice-mode-label')).toContainText('彈吉他')
+  if ((await currentQuestion(page)).kind === 'fret-locate') await page.getByRole('button', { name: '跳過（不扣分）', exact: true }).click()
+  await expect(page.locator('.pitch-picker')).toBeVisible()
+  await expect(page.locator('.play-listen')).toHaveCount(0)
+  const naming = await currentQuestion(page)
+  if (naming.kind !== 'fret-identify') throw new Error('Expected accidental naming')
+  await expectBank(page, instrument, async () => {
+    await page.locator('.pitch-picker button').nth(naming.answerPc).click()
+    await expect(page.locator('.feedback strong')).toContainText('正確')
+  })
+  await page.getByRole('button', { name: '結束這次', exact: true }).click()
 })

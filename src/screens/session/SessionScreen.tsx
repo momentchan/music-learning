@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { navigate } from '../../app/router'
 import { nodeById } from '../../curriculum/nodes'
 import { repository } from '../../database/repository'
-import { naturalNoteConfirmation } from '../../exercise-engine/answerNote'
+import { noteConfirmation } from '../../exercise-engine/answerNote'
 import type { Grade, Question, Response } from '../../exercise-engine/types'
 import { playedQuestion } from '../../exercise-engine/playedAnswer'
 import { validate } from '../../exercise-engine/validate'
@@ -124,7 +124,7 @@ export function SessionScreen({ sessionId }: { sessionId: string }) {
     const grade = validate(question, response)
     const microphone = response.kind === 'played-note'
     // A played answer is already the guitar. Do not play it back into the open microphone.
-    const confirmation = inputMode === 'play' ? null : naturalNoteConfirmation(question, response, grade)
+    const confirmation = microphone ? null : noteConfirmation(question, response, grade)
     confirming.current = !!confirmation && audioIsOn()
     if (confirming.current && confirmation) void play(confirmation)
     const isRetry = !!retry

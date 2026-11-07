@@ -34,7 +34,7 @@ Microphone input now shows an independent volume meter and detected note. Starti
 
 ## One global playback instrument
 
-Settings → **全站聲音 → 樂器音色** controls every generated sound: fretboard notes/replay, question and answer examples, correct-note confirmation, chord/interval/scale tools, progressions, comparisons, ear exercises, metronome and count-in/calibration cues. Selecting guitar uses the recorded acoustic-guitar bank throughout; selecting piano uses the recorded piano bank throughout. Beat accents use short notes from that same bank rather than a separate synthesized click.
+Settings → **全站聲音 → 樂器音色** controls every generated sound: fretboard notes/replay, question and answer examples, fretboard-answer confirmation (natural and accidental notes), chord/interval/scale tools, progressions, comparisons, ear exercises, metronome and count-in/calibration cues. Selecting guitar uses the recorded acoustic-guitar bank throughout; selecting piano uses the recorded piano bank throughout. Beat accents use short notes from that same bank rather than a separate synthesized click.
 
 The setting updates the shared engine immediately, saves changes in order, synchronizes other open tabs and refreshes when returning to the app. A delayed read of older saved settings cannot undo a more recent choice. Microphone input is still live input; it is not echoed or transformed into the selected playback instrument.
 
